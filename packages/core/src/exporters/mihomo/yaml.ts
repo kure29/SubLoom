@@ -30,9 +30,19 @@ function needsDouble(s: string): boolean {
   return false
 }
 
+/** AMBIGUOUS 能匹配的字符串只可能以这些字符开头；其余跳过这个较慢的正则 */
+const AMBIGUOUS_FIRST = new Set('0123456789+-.yYnNtTfFoO~<=')
+
 function scalarString(s: string): string {
   const double = needsDouble(s)
-  if (s !== '' && !double && !NOT_PLAIN.test(s) && !AMBIGUOUS.test(s)) return s
+  if (
+    s !== '' &&
+    !double &&
+    !NOT_PLAIN.test(s) &&
+    !(AMBIGUOUS_FIRST.has(s[0] as string) && AMBIGUOUS.test(s))
+  ) {
+    return s
+  }
   // 只含双引号时用单引号，与 yaml 库一致；其余用双引号（JSON 字符串是合法的 YAML 双引号标量）
   if (!double && s.includes('"') && !s.includes("'")) {
     return `'${s.replace(/'/g, "''")}'`
@@ -76,6 +86,25 @@ function scalar(v: unknown): string {
 const isMap = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 
+/** 映射的键大多重复出现（name、type、server……），缓存它们的写法 */
+const keyCache = new Map<string, string>()
+
+function keyString(k: string): string {
+  let out = keyCache.get(k)
+  if (out === undefined) {
+    out = scalarString(k)
+    if (keyCache.size < 1000) keyCache.set(k, out)
+  }
+  return out
+}
+
+/** 值不是 undefined 的键（与 yaml 库一样跳过 undefined） */
+function definedKeys(v: Record<string, unknown>): string[] {
+  const keys = Object.keys(v)
+  for (const k of keys) if (v[k] === undefined) return keys.filter((x) => v[x] !== undefined)
+  return keys
+}
+
 /** 写一个值：标量和空容器跟在 head 后面同一行，非空容器另起一行 */
 function writeValue(out: string[], head: string, v: unknown, indent: string): void {
   if (Array.isArray(v)) {
@@ -85,19 +114,24 @@ function writeValue(out: string[], head: string, v: unknown, indent: string): vo
       writeSeq(out, v, `${indent}  `)
     }
   } else if (isMap(v)) {
-    const entries = Object.entries(v).filter(([, x]) => x !== undefined)
-    if (!entries.length) out.push(`${head} {}`)
+    const keys = definedKeys(v)
+    if (!keys.length) out.push(`${head} {}`)
     else {
       out.push(head)
-      writeMap(out, entries, `${indent}  `)
+      writeMap(out, v, keys, `${indent}  `)
     }
   } else {
     out.push(`${head} ${scalar(v)}`)
   }
 }
 
-function writeMap(out: string[], entries: Array<[string, unknown]>, indent: string): void {
-  for (const [k, v] of entries) writeValue(out, `${indent}${scalarString(k)}:`, v, indent)
+function writeMap(
+  out: string[],
+  map: Record<string, unknown>,
+  keys: string[],
+  indent: string,
+): void {
+  for (const k of keys) writeValue(out, `${indent}${keyString(k)}:`, map[k], indent)
 }
 
 /** 序列项：映射的第一个键和嵌套序列的第一项写在 "- " 同一行 */
@@ -105,12 +139,9 @@ function writeSeq(out: string[], items: unknown[], indent: string): void {
   for (const item of items) {
     const v = item === undefined ? null : item
     const start = out.length
-    if (isMap(v) && Object.values(v).some((x) => x !== undefined)) {
-      writeMap(
-        out,
-        Object.entries(v).filter(([, x]) => x !== undefined),
-        `${indent}  `,
-      )
+    const keys = isMap(v) ? definedKeys(v) : undefined
+    if (isMap(v) && keys?.length) {
+      writeMap(out, v, keys, `${indent}  `)
     } else if (Array.isArray(v) && v.length) {
       writeSeq(out, v, `${indent}  `)
     } else {
@@ -124,10 +155,6 @@ function writeSeq(out: string[], items: unknown[], indent: string): void {
 /** 顶层必须是映射 */
 export function stringifyYaml(doc: Record<string, unknown>): string {
   const out: string[] = []
-  writeMap(
-    out,
-    Object.entries(doc).filter(([, x]) => x !== undefined),
-    '',
-  )
+  writeMap(out, doc, definedKeys(doc), '')
   return out.length ? `${out.join('\n')}\n` : '{}\n'
 }

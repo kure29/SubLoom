@@ -7,9 +7,13 @@ export function isRecord(v: unknown): v is Record<string, unknown> {
 
 /** 去掉值为 undefined 的键；结果为空对象时返回 undefined */
 export function compact(o: Record<string, unknown>): Record<string, unknown> | undefined {
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(o)) if (v !== undefined) out[k] = v
-  return Object.keys(out).length ? out : undefined
+  let out: Record<string, unknown> | undefined
+  for (const k of Object.keys(o)) {
+    if (o[k] === undefined) continue
+    out ??= {}
+    out[k] = o[k]
+  }
+  return out
 }
 
 /** 深度合并 extra：已有的键（来自 IR）优先，同为对象时递归合并 */
