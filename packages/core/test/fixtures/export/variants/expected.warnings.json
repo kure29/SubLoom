@@ -1,18 +1,272 @@
 {
   "pipeline": [],
-  "export": [
+  "mihomo": [
     {
       "level": "warn",
       "path": "groups[0].members[1]",
       "code": "UNKNOWN_GROUP_MEMBER",
-      "message": "the proxy referenced by this member does not exist",
+      "message": "the proxy referenced by this member does not exist or was dropped",
       "action": "dropped"
     },
     {
       "level": "warn",
       "path": "groups[0].members[5]",
       "code": "UNKNOWN_GROUP_MEMBER",
-      "message": "the proxy referenced by this member does not exist",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "info",
+      "path": "ruleSets[1].extra.mihomo.proxy",
+      "code": "EXTRA_IGNORED",
+      "message": "the download policy of rule sets is set by the ruleSetPolicy export option",
+      "action": "dropped"
+    }
+  ],
+  "surge": [
+    {
+      "level": "warn",
+      "path": "general.mixedPort",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.allowLan",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.mode",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.enable",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching DNS setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.enhancedMode",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching DNS setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[1].plugin",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support v2ray-plugin",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[3]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support ssr proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[4].transport",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support the h2 transport",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[5].transport",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support the http transport",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[6]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[7]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[8]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[9].tls.certFingerprint",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge only accepts a SHA-256 certificate fingerprint",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[10].up",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge only accepts the download bandwidth",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[11].congestionController",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge has no TUIC option for congestionController",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[11].udpRelayMode",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge has no TUIC option for udpRelayMode",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[11].reduceRtt",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge has no TUIC option for reduceRtt",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[12].extra.mihomo.dns",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge needs a DNS server inside the WireGuard tunnel",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[0].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[2].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[10].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[13].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[1]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[5]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[1].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[2].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[0]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no Surge source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[1]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no Surge source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[0]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[1]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[6]",
+      "code": "UNSUPPORTED_RULE_TYPE",
+      "message": "Surge does not support DOMAIN-REGEX rules",
+      "action": "dropped"
+    },
+    {
+      "level": "info",
+      "path": "groups[2].filter",
+      "code": "GROUP_FILTER_REWRITTEN",
+      "message": "Surge has no exclude filter; include and exclude were merged into one regular expression",
+      "action": "kept"
+    },
+    {
+      "level": "info",
+      "path": "groups[1].testUrl",
+      "code": "TEST_URL_REWRITTEN",
+      "message": "HTTPS test URLs need Surge iOS 5.23.0+ / Mac 6.10.0+; the HTTP URL is used instead",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
       "action": "dropped"
     }
   ]

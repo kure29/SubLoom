@@ -157,12 +157,14 @@ export class Reader {
 
   /** 未消费的键，保持来源顺序 */
   rest(): Record<string, unknown> | undefined {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(this.src)) {
+    let out: Record<string, unknown> | undefined
+    for (const k of Object.keys(this.src)) {
+      const v = this.src[k]
       if (this.used.has(k) || v === undefined || v === null || v === '') continue
+      out ??= {}
       out[k] = v
     }
-    return Object.keys(out).length ? out : undefined
+    return out
   }
 }
 
@@ -192,9 +194,11 @@ export function canonical<T>(value: T): T {
   if (Array.isArray(value)) return value.map(canonical) as T
   if (!isRecordLike(value)) return value
   const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(value)) {
+  for (const k of Object.keys(value)) {
+    const v = value[k]
     if (v === undefined || (v === false && !TRI_STATE_KEYS.has(k))) continue
-    out[k] = k === 'extra' ? v : canonical(v)
+    // 标量直接复制，省去递归调用（导入热路径）
+    out[k] = k === 'extra' || typeof v !== 'object' || v === null ? v : canonical(v)
   }
   return out as T
 }

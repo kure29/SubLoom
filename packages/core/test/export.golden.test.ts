@@ -3,7 +3,9 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import {
   createTemplate,
+  ExportOptionsSchema,
   exportMihomo,
+  exportSurge,
   type ImportResult,
   importMihomoYaml,
   importSubscription,
@@ -11,6 +13,7 @@ import {
   type Profile,
   ProfileSchema,
   ProxySchema,
+  type RuleSet,
   runPipeline,
   TEMPLATE_IDS,
 } from '../src/index.js'
@@ -33,7 +36,7 @@ const CaseSchema = z
     /** 用订阅中的策略组、规则等作为 profile */
     importConfig: z.literal(true).optional(),
     pipeline: PipelineSchema.optional(),
-    options: z.strictObject({ defaultUdp: z.boolean().optional() }).optional(),
+    options: ExportOptionsSchema.optional(),
   })
   .refine(
     (c) => [c.profile, c.template, c.importConfig].filter((x) => x !== undefined).length === 1,
@@ -75,8 +78,10 @@ function generate(c: Case) {
   const imported = c.subscription === undefined ? undefined : subscription(c.subscription)
   const nodes = [...(imported?.proxies ?? []), ...(c.nodes ?? [])]
   const pipeline = runPipeline(nodes, c.pipeline ?? [])
-  const result = exportMihomo(profileOf(c, imported), pipeline.nodes, c.options)
-  return { imported, nodes: pipeline.nodes, pipeline, result }
+  const profile = profileOf(c, imported)
+  const result = exportMihomo(profile, pipeline.nodes, c.options)
+  const surge = exportSurge(profile, pipeline.nodes, c.options)
+  return { imported, nodes: pipeline.nodes, pipeline, result, surge }
 }
 
 const cases = Object.entries(inputs)
@@ -115,9 +120,15 @@ describe('golden: export fixtures', () => {
     )
   })
 
+  it.each(cases)('$name matches expected.surge.conf', async ({ name }) => {
+    await expect(output(name).surge.text).toMatchFileSnapshot(
+      `./fixtures/export/${name}/expected.surge.conf`,
+    )
+  })
+
   it.each(cases)('$name matches expected.warnings.json', async ({ name }) => {
-    const { pipeline, result } = output(name)
-    const warnings = { pipeline: pipeline.warnings, export: result.warnings }
+    const { pipeline, result, surge } = output(name)
+    const warnings = { pipeline: pipeline.warnings, mihomo: result.warnings, surge: surge.warnings }
     await expect(`${JSON.stringify(warnings, null, 2)}\n`).toMatchFileSnapshot(
       `./fixtures/export/${name}/expected.warnings.json`,
     )
@@ -131,6 +142,13 @@ describe('golden: export fixtures', () => {
   })
 })
 
+function withoutPolicy(sets: RuleSet[] = []): RuleSet[] {
+  return sets.map(({ extra, ...set }) => {
+    const { proxy: _, ...mihomo } = extra?.mihomo ?? {}
+    return Object.keys(mihomo).length ? { ...set, extra: { ...extra, mihomo } } : set
+  })
+}
+
 describe('round trip of mihomo configs', () => {
   it.each(['airport-full', 'variants'])('%s re-imports to the same IR', (name) => {
     const { imported, result } = output(name)
@@ -138,7 +156,8 @@ describe('round trip of mihomo configs', () => {
     const again = importMihomoYaml(result.text)
     expect(again.proxies).toEqual(imported.proxies)
     expect(again.config?.rules).toEqual(imported.config.rules)
-    expect(again.config?.ruleSets).toEqual(imported.config.ruleSets)
+    // 规则集的下载策略由导出选项决定，不参与往返比较
+    expect(withoutPolicy(again.config?.ruleSets)).toEqual(withoutPolicy(imported.config.ruleSets))
     expect(again.config?.general).toEqual(imported.config.general)
     expect(again.config?.dns).toEqual(imported.config.dns)
   })

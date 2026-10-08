@@ -1,6 +1,6 @@
 {
   "pipeline": [],
-  "export": [
+  "mihomo": [
     {
       "level": "warn",
       "path": "groups[1]",
@@ -12,28 +12,28 @@
       "level": "warn",
       "path": "proxies[1]",
       "code": "DUPLICATE_PROXY_NAME",
-      "message": "renamed because the name is already used by another proxy, a group or a built-in target",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
       "action": "kept"
     },
     {
       "level": "warn",
       "path": "nodes[0]",
       "code": "DUPLICATE_PROXY_NAME",
-      "message": "renamed because the name is already used by another proxy, a group or a built-in target",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
       "action": "kept"
     },
     {
       "level": "warn",
       "path": "nodes[1]",
       "code": "DUPLICATE_PROXY_NAME",
-      "message": "renamed because the name is already used by another proxy, a group or a built-in target",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
       "action": "kept"
     },
     {
       "level": "warn",
       "path": "nodes[2]",
       "code": "DUPLICATE_PROXY_NAME",
-      "message": "renamed because the name is already used by another proxy, a group or a built-in target",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
       "action": "kept"
     },
     {
@@ -54,21 +54,21 @@
       "level": "warn",
       "path": "groups[0].members[2]",
       "code": "UNKNOWN_GROUP_MEMBER",
-      "message": "the proxy referenced by this member does not exist",
+      "message": "the proxy referenced by this member does not exist or was dropped",
       "action": "dropped"
     },
     {
       "level": "warn",
       "path": "groups[0].members[3]",
       "code": "UNKNOWN_GROUP_MEMBER",
-      "message": "the group referenced by this member does not exist",
+      "message": "the group referenced by this member does not exist or was dropped",
       "action": "dropped"
     },
     {
       "level": "warn",
       "path": "groups[2].members[0]",
       "code": "UNKNOWN_GROUP_MEMBER",
-      "message": "the proxy referenced by this member does not exist",
+      "message": "the proxy referenced by this member does not exist or was dropped",
       "action": "dropped"
     },
     {
@@ -132,6 +132,169 @@
       "path": "rules[5]",
       "code": "UNKNOWN_RULE_TARGET",
       "message": "the rule target does not exist",
+      "action": "dropped"
+    }
+  ],
+  "surge": [
+    {
+      "level": "warn",
+      "path": "groups[1]",
+      "code": "DUPLICATE_GROUP_NAME",
+      "message": "a group with the same name already exists",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "proxies[1]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[0]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[1]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[2]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[3].extra.uri",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the uri format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[4].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[2]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[3]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the group referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[2].members[0]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[2]",
+      "code": "EMPTY_GROUP",
+      "message": "the group has no members left; DIRECT was added",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "groups[3].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[3]",
+      "code": "EMPTY_GROUP",
+      "message": "the group has no members left; DIRECT was added",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[1]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no Surge source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[2]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no Surge source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[3]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no Surge source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "options.ruleSetPolicy",
+      "code": "RULE_SET_PROXY_UNSUPPORTED",
+      "message": "Surge cannot download rule sets through a policy group; use a rule set mirror if the original URLs are not reachable directly",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[1]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[2]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[3]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[4]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[5]",
+      "code": "UNKNOWN_RULE_TARGET",
+      "message": "the rule target does not exist",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
       "action": "dropped"
     }
   ]

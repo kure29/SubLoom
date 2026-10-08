@@ -406,6 +406,28 @@ describe('name conflicts', () => {
     ])
   })
 
+  it('replaces commas in names because rules cannot quote them', () => {
+    const { doc, warnings } = exp(
+      profile({
+        groups: [{ name: 'HK, low', type: 'select', members: [{ kind: 'proxy', name: 'a,b' }] }],
+        rules: [
+          { type: 'DOMAIN-KEYWORD', value: 'x,y', target: 'HK, low' },
+          { type: 'DOMAIN', value: 'a.example.com', target: 'a,b' },
+          { type: 'MATCH', target: 'HK, low' },
+        ],
+      }),
+      [ss('a,b')],
+    )
+    expect(doc.proxies.map((p) => p.name)).toEqual(['a，b'])
+    expect(doc['proxy-groups']).toEqual([{ name: 'HK， low', type: 'select', proxies: ['a，b'] }])
+    expect(doc.rules).toEqual(['DOMAIN,a.example.com,a，b', 'MATCH,HK， low'])
+    expect(codes(warnings)).toEqual([
+      ['INVALID_NAME_CHARS', 'groups[0].name', 'kept'],
+      ['INVALID_NAME_CHARS', 'nodes[0].name', 'kept'],
+      ['UNSUPPORTED_RULE_VALUE', 'rules[0]', 'dropped'],
+    ])
+  })
+
   it('drops duplicate groups, keeping the first', () => {
     const { doc, warnings } = exp(
       profile({
@@ -631,10 +653,72 @@ describe('rule sets', () => {
         behavior: 'ipcidr',
         format: 'mrs',
         url: 'https://r.example.com/ip.mrs',
+        proxy: 'DIRECT',
       },
     })
     expect(doc.rules).toEqual(['RULE-SET,ads,REJECT', 'RULE-SET,ip,DIRECT,src,no-resolve'])
     expect(warnings).toEqual([])
+  })
+
+  describe('download policy and mirror', () => {
+    const groups: Profile['groups'] = [
+      { name: 'Auto', type: 'url-test', members: [{ kind: 'builtin', name: 'DIRECT' }] },
+      { name: 'Proxy', type: 'select', members: [{ kind: 'group', name: 'Auto' }] },
+    ]
+    const RAW = 'https://raw.githubusercontent.com/o/r/master/rule/Clash/a.yaml'
+    const p = profile({
+      groups,
+      ruleSets: [
+        set('a', {
+          sources: { mihomo: { url: RAW, format: 'yaml' } },
+          extra: { mihomo: { proxy: 'Auto' } },
+        }),
+      ],
+      rules: [{ type: 'RULE-SET', value: 'a', target: 'Proxy' }],
+    })
+    const provider = (opts?: ExportOptions) => {
+      const { doc, warnings } = exp(p, [], opts)
+      return { provider: doc['rule-providers']?.a, warnings }
+    }
+
+    it('downloads through the first select group by default, overriding extra', () => {
+      const { provider: a, warnings } = provider()
+      expect(a?.proxy).toBe('Proxy')
+      expect(Object.keys(a ?? {})).toEqual(['type', 'behavior', 'format', 'url', 'proxy'])
+      expect(warnings).toEqual([
+        expect.objectContaining({
+          level: 'info',
+          code: 'EXTRA_IGNORED',
+          path: 'ruleSets[0].extra.mihomo.proxy',
+        }),
+      ])
+    })
+
+    it('uses the chosen policy', () => {
+      expect(provider({ ruleSetPolicy: 'Auto' })).toEqual({
+        provider: expect.objectContaining({ proxy: 'Auto' }),
+        warnings: [],
+      })
+      expect(provider({ ruleSetPolicy: 'DIRECT' }).provider?.proxy).toBe('DIRECT')
+    })
+
+    it('falls back to DIRECT when the chosen group is gone', () => {
+      const { provider: a, warnings } = provider({ ruleSetPolicy: '节点选择' })
+      expect(a?.proxy).toBe('DIRECT')
+      expect(codes(warnings)).toEqual([
+        ['UNKNOWN_RULE_SET_POLICY', 'options.ruleSetPolicy', 'downgraded'],
+        ['EXTRA_IGNORED', 'ruleSets[0].extra.mihomo.proxy', 'dropped'],
+      ])
+    })
+
+    it('rewrites URLs for the mirror', () => {
+      expect(provider({ ruleSetMirror: 'jsdelivr' }).provider?.url).toBe(
+        'https://cdn.jsdelivr.net/gh/o/r@master/rule/Clash/a.yaml',
+      )
+      expect(provider({ ruleSetMirror: { prefix: 'https://m.example.com/' } }).provider?.url).toBe(
+        `https://m.example.com/${RAW}`,
+      )
+    })
   })
 
   it('drops unusable rule sets and the rules that reference them', () => {

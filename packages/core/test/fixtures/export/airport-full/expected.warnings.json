@@ -1,4 +1,146 @@
 {
   "pipeline": [],
-  "export": []
+  "mihomo": [],
+  "surge": [
+    {
+      "level": "warn",
+      "path": "general.mixedPort",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.mode",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[5].tls.clientFingerprint",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support uTLS fingerprints",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[6].transport",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support the grpc transport",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[7]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[8]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[13].congestionController",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge has no TUIC option for congestionController",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[13].udpRelayMode",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge has no TUIC option for udpRelayMode",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[14].tls.clientFingerprint",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support uTLS fingerprints",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[7]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[8]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[9]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[1].members[4]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[1].members[5]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[1].members[6]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[2].members[1]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[0]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no Surge source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[0]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[7]",
+      "code": "UNSUPPORTED_RULE_TYPE",
+      "message": "Surge does not support GEOSITE rules",
+      "action": "dropped"
+    },
+    {
+      "level": "info",
+      "path": "groups[1].testUrl",
+      "code": "TEST_URL_REWRITTEN",
+      "message": "HTTPS test URLs need Surge iOS 5.23.0+ / Mac 6.10.0+; the HTTP URL is used instead",
+      "action": "downgraded"
+    }
+  ]
 }

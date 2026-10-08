@@ -1,4 +1,48 @@
 {
   "pipeline": [],
-  "export": []
+  "mihomo": [],
+  "surge": [
+    {
+      "level": "warn",
+      "path": "nodes[4].tls.clientFingerprint",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support uTLS fingerprints",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[6]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[8].transport",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support the grpc transport",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[9]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "options.ruleSetPolicy",
+      "code": "RULE_SET_PROXY_UNSUPPORTED",
+      "message": "Surge cannot download rule sets through a policy group; use a rule set mirror if the original URLs are not reachable directly",
+      "action": "dropped"
+    },
+    {
+      "level": "info",
+      "path": "groups[1].testUrl",
+      "code": "TEST_URL_REWRITTEN",
+      "message": "HTTPS test URLs need Surge iOS 5.23.0+ / Mac 6.10.0+; the HTTP URL is used instead",
+      "action": "downgraded"
+    }
+  ]
 }

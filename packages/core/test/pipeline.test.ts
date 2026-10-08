@@ -84,6 +84,8 @@ describe('PipelineSchema', () => {
       { op: 'dedupe', by: 'server' },
       { op: 'prefix', text: '[A] ' },
       { op: 'suffix', text: ' [A]' },
+      { op: 'force-udp' },
+      { op: 'force-udp', pattern: '(?i)hk', types: ['ss', 'trojan'] },
     ]
     expect(PipelineSchema.parse(ops)).toEqual(ops)
   })
@@ -94,6 +96,9 @@ describe('PipelineSchema', () => {
     { op: 'filter-region', regions: ['hk'], mode: 'keep' },
     { op: 'filter-regex', pattern: 'a', mode: 'maybe' },
     { op: 'add-flag', extra: true },
+    { op: 'force-udp', types: [] },
+    { op: 'force-udp', pattern: '' },
+    { op: 'force-udp', udp: false },
   ])('rejects %j', (op) => {
     expect(PipelineSchema.safeParse([op]).success).toBe(false)
   })
@@ -271,5 +276,67 @@ describe('runPipeline', () => {
     expect(r.warnings).toEqual([
       expect.objectContaining({ code: 'EMPTY_NAME', path: 'pipeline[0]' }),
     ])
+  })
+
+  describe('force-udp', () => {
+    const nodes = [
+      ss('HK 01'),
+      { ...ss('HK 02'), udp: false },
+      trojan('hk 03'),
+      { ...trojan('JP 01'), udp: false },
+    ]
+    const udp = (r: { nodes: ProxyNode[] }) => r.nodes.map((n) => [n.name, n.udp])
+
+    it('turns udp on for every node without a scope', () => {
+      const r = run(nodes, [{ op: 'force-udp' }])
+      expect(udp(r)).toEqual([
+        ['HK 01', true],
+        ['HK 02', true],
+        ['hk 03', true],
+        ['JP 01', true],
+      ])
+      expect(r.warnings).toEqual([])
+    })
+
+    it('limits the scope by name pattern', () => {
+      expect(udp(run(nodes, [{ op: 'force-udp', pattern: '(?i)^hk' }]))).toEqual([
+        ['HK 01', true],
+        ['HK 02', true],
+        ['hk 03', true],
+        ['JP 01', false],
+      ])
+    })
+
+    it('limits the scope by type', () => {
+      expect(udp(run(nodes, [{ op: 'force-udp', types: ['trojan'] }]))).toEqual([
+        ['HK 01', undefined],
+        ['HK 02', false],
+        ['hk 03', true],
+        ['JP 01', true],
+      ])
+    })
+
+    it('requires both the pattern and the type to match when both are given', () => {
+      expect(udp(run(nodes, [{ op: 'force-udp', pattern: 'HK', types: ['ss'] }]))).toEqual([
+        ['HK 01', true],
+        ['HK 02', true],
+        ['hk 03', undefined],
+        ['JP 01', false],
+      ])
+    })
+
+    it('does not modify the input nodes', () => {
+      const input = [ss('a')]
+      run(input, [{ op: 'force-udp' }])
+      expect(input[0]?.udp).toBeUndefined()
+    })
+
+    it('skips the op and warns on an invalid regex', () => {
+      const r = run(nodes, [{ op: 'force-udp', pattern: '(' }])
+      expect(udp(r)).toEqual(udp({ nodes }))
+      expect(r.warnings).toEqual([
+        expect.objectContaining({ code: 'INVALID_REGEX', path: 'pipeline[0]' }),
+      ])
+    })
   })
 })

@@ -163,19 +163,21 @@ rule-providers:
     behavior: domain
     format: yaml
     url: https://rules.example.com/ads.yaml
+    proxy: Proxy
     interval: 86400
   cn-ip:
     type: http
     behavior: ipcidr
     format: mrs
     url: https://rules.example.com/cn.mrs
+    proxy: Proxy
   apps:
     type: http
     behavior: classical
     format: text
     url: https://rules.example.com/apps.list
+    proxy: Proxy
     path: ./ruleset/apps.list
-    proxy: DIRECT
 rules:
   - RULE-SET,ads,Block
   - DOMAIN,direct.example.com,DIRECT

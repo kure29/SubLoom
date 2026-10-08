@@ -1,4 +1,294 @@
 {
   "pipeline": [],
-  "export": []
+  "mihomo": [
+    {
+      "level": "info",
+      "path": "ruleSets[2].extra.mihomo.proxy",
+      "code": "EXTRA_IGNORED",
+      "message": "the download policy of rule sets is set by the ruleSetPolicy export option",
+      "action": "dropped"
+    }
+  ],
+  "surge": [
+    {
+      "level": "warn",
+      "path": "general.port",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.socksPort",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.redirPort",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.tproxyPort",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.mixedPort",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.allowLan",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.bindAddress",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.mode",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "general.extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.enable",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching DNS setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.listen",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching DNS setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.enhancedMode",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching DNS setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.fakeIpRange",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching DNS setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.fallback",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching DNS setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[0].extra.mihomo.dns",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge needs a DNS server inside the WireGuard tunnel",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[1].congestionController",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge has no TUIC option for congestionController",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[1].udpRelayMode",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge has no TUIC option for udpRelayMode",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[1].reduceRtt",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge has no TUIC option for reduceRtt",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[2].tls.clientFingerprint",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support uTLS fingerprints",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[3].transport",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support the http transport",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[4]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support ssr proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[2].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[1].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[2].members[0]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[3].members[0]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[3].members[2]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[3].extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[1]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no Surge source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[2]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no Surge source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "options.ruleSetPolicy",
+      "code": "RULE_SET_PROXY_UNSUPPORTED",
+      "message": "Surge cannot download rule sets through a policy group; use a rule set mirror if the original URLs are not reachable directly",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[4]",
+      "code": "UNSUPPORTED_RULE_TYPE",
+      "message": "Surge does not support DOMAIN-REGEX rules",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[5]",
+      "code": "UNSUPPORTED_RULE_TYPE",
+      "message": "Surge does not support GEOSITE rules",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[10]",
+      "code": "UNSUPPORTED_RULE_PARAM",
+      "message": "Surge cannot match IP-ASN rules against the source address",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[13]",
+      "code": "UNSUPPORTED_RULE_PARAM",
+      "message": "Surge cannot match RULE-SET rules against the source address",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[14]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[15]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "info",
+      "path": "groups[1].filter",
+      "code": "GROUP_FILTER_REWRITTEN",
+      "message": "Surge has no exclude filter; include and exclude were merged into one regular expression",
+      "action": "kept"
+    },
+    {
+      "level": "info",
+      "path": "groups[1].testUrl",
+      "code": "TEST_URL_REWRITTEN",
+      "message": "HTTPS test URLs need Surge iOS 5.23.0+ / Mac 6.10.0+; the HTTP URL is used instead",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "extra.mihomo",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the mihomo format cannot be exported to surge",
+      "action": "dropped"
+    }
+  ]
 }

@@ -1,0 +1,209 @@
+mixed-port: 7890
+log-level: info
+ipv6: false
+dns:
+  enhanced-mode: fake-ip
+  default-nameserver:
+    - 223.5.5.5
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - tls://1.12.12.12
+    - 119.29.29.29
+    - dhcp://en0
+proxies:
+  - name: WG Home
+    type: wireguard
+    server: 198.51.100.41
+    port: 51820
+    private-key: ZmFrZS1wcml2YXRl
+    public-key: ZmFrZS1wdWJsaWM=
+    ip: 10.0.0.2/32
+    reserved:
+      - 1
+      - 2
+      - 3
+    mtu: 1280
+    udp: true
+    dns:
+      - 10.0.0.1
+    remote-dns-resolve: true
+  - name: HTTPS
+    type: http
+    server: http.example.com
+    port: 443
+    username: fake-user
+    password: fake,pass
+    udp: true
+    tls: true
+    sni: http.example.com
+  - name: VMess WS
+    type: vmess
+    server: vmess.example.com
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000001
+    alterId: 0
+    cipher: auto
+    udp: true
+    tls: true
+    servername: cdn.example.com
+    alpn:
+      - h2
+      - http/1.1
+    network: ws
+    ws-opts:
+      path: /ws?ed=2048
+      headers:
+        Host: cdn.example.com
+      max-early-data: 2048
+      early-data-header-name: Sec-WebSocket-Protocol
+  - name: VMess legacy
+    type: vmess
+    server: 198.51.100.2
+    port: 10086
+    uuid: 00000000-0000-4000-8000-000000000002
+    alterId: 64
+    cipher: chacha20-poly1305
+    udp: true
+  - name: VMess gRPC
+    type: vmess
+    server: grpc.example.com
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000003
+    alterId: 0
+    cipher: auto
+    udp: true
+    tls: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: svc
+  - name: Trojan WS
+    type: trojan
+    server: trojan.example.com
+    port: 443
+    password: fake-trojan
+    udp: true
+    sni: trojan.example.com
+    client-fingerprint: chrome
+    fingerprint: 8F:1D:2B:3C:4D:5E:6F:70:81:92:A3:B4:C5:D6:E7:F8:09:1A:2B:3C:4D:5E:6F:70:81:92:A3:B4:C5:D6:E7:F8
+    network: ws
+    ws-opts:
+      path: /trojan
+  - name: "🇭🇰 HK 01， IPLC x1.5 #1"
+    type: ss
+    server: hk1.example.com
+    port: 8388
+    cipher: 2022-blake3-aes-128-gcm
+    password: ZmFrZS1zcy0yMDIyLWtleQ==
+    plugin: obfs
+    plugin-opts:
+      mode: http
+      host: bing.com
+    udp: true
+  - name: 🇭🇰 HK 02 v2ray
+    type: ss
+    server: hk2.example.com
+    port: 443
+    cipher: aes-256-gcm
+    password: fake-ss
+    plugin: v2ray-plugin
+    plugin-opts:
+      mode: websocket
+      host: hk2.example.com
+      tls: true
+    udp: true
+  - name: 🇯🇵 JP Hy2 =fast
+    type: hysteria2
+    server: jp.example.com
+    port: 443
+    password: fake-hy2
+    ports: 443,20000-30000
+    up: 30 Mbps
+    down: 200 Mbps
+    obfs: salamander
+    obfs-password: fake-obfs
+    udp: true
+    sni: jp.example.com
+    skip-cert-verify: true
+  - name: 🇸🇬 SG TUIC
+    type: tuic
+    server: sg.example.com
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000004
+    password: fake-tuic
+    congestion-controller: bbr
+    udp: true
+    sni: sg.example.com
+    alpn:
+      - h3
+  - name: 🇺🇸 US AnyTLS
+    type: anytls
+    server: us.example.com
+    port: 443
+    password: fake-anytls
+    udp: true
+    sni: us.example.com
+    ech-opts:
+      enable: true
+  - name: 🇺🇸 US Reality
+    type: vless
+    server: us2.example.com
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000005
+    flow: xtls-rprx-vision
+    udp: true
+    tls: true
+    servername: www.example.com
+    reality-opts:
+      public-key: Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm8
+      short-id: "01"
+  - name: SOCKS5
+    type: socks5
+    server: 198.51.100.42
+    port: 1080
+    username: fake-user
+    password: fake-pass
+    udp: true
+    tfo: true
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - Auto
+      - HK， low ratio
+      - WG Home
+      - DIRECT
+    include-all-proxies: true
+  - name: Auto
+    type: url-test
+    include-all-proxies: true
+    exclude-filter: (?i)ipv6|游戏
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: HK， low ratio
+    type: fallback
+    include-all-proxies: true
+    filter: (?i)港|hk
+    exclude-filter: x\d{2,3}
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+  - name: Balance
+    type: load-balance
+    proxies:
+      - VMess WS
+      - Trojan WS
+    url: https://cp.example.com/generate_204
+rules:
+  - DOMAIN-SUFFIX,hk.example.com,HK， low ratio
+  - GEOSITE,google,Proxy
+  - DOMAIN-REGEX,^ad\.,REJECT
+  - PROCESS-NAME,Telegram,Proxy
+  - SRC-IP-CIDR,192.168.1.0/24,DIRECT
+  - IP-CIDR,192.168.2.0/24,REJECT,src
+  - GEOIP,CN,DIRECT,src
+  - IP-CIDR,10.0.0.0/8,WG Home,no-resolve
+  - IP-ASN,13335,Balance,no-resolve
+  - OR,((NOT,((DST-PORT,80))),(IP-CIDR6,2001:db8::/32)),Proxy
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy
+  - DOMAIN,after.example.com,DIRECT
