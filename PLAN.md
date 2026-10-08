@@ -405,10 +405,10 @@ GET /sub/:token
 每个里程碑大致对应 Claude Code 的一到几次会话。完成后在此处勾选。
 
 ### M0 仓库脚手架
-- [ ] pnpm workspaces + Turborepo，TypeScript strict 基础配置，Biome，Vitest
-- [ ] 创建 3 节中的所有包和应用的空壳，包名按"命名约定"使用 `@subloom/*`
-- [ ] CLAUDE.md（硬性约束、常用命令）
-- [ ] GitHub Actions：lint、typecheck、test、build
+- [x] pnpm workspaces + Turborepo，TypeScript strict 基础配置，Biome，Vitest
+- [x] 创建 3 节中的所有包和应用的空壳，包名按"命名约定"使用 `@subloom/*`
+- [x] CLAUDE.md（硬性约束、常用命令）
+- [x] GitHub Actions：lint、typecheck、test、build
 - **验收**：`pnpm lint && pnpm typecheck && pnpm test && pnpm build` 全部通过
 
 ### M1 core：IR 与 mihomo
@@ -418,6 +418,7 @@ GET /sub/:token
 - [ ] 流水线操作（第 4 节全部）
 - [ ] 预设模板 2 套（极简、常用分流）
 - [ ] golden 测试，CI 中执行 `mihomo -t`
+- [ ] 有测试后去掉各包 `test` 脚本中的 `--passWithNoTests`
 - **验收**：样例订阅导入后经流水线处理，导出的配置能通过 `mihomo -t`
 
 ### M2 core：Surge 与兼容性警告
