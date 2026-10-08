@@ -1,0 +1,255 @@
+{
+  "format": "uri-list",
+  "proxies": [
+    {
+      "name": "VLESS Reality gRPC",
+      "type": "vless",
+      "server": "203.0.113.21",
+      "port": 443,
+      "uuid": "00000000-0000-4000-8000-000000000011",
+      "tls": {
+        "sni": "www.example.com",
+        "clientFingerprint": "safari",
+        "reality": {
+          "publicKey": "Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm8",
+          "shortId": "0123"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "serviceName": "grpc-svc"
+      },
+      "extra": {
+        "uri": {
+          "spx": "/"
+        }
+      }
+    },
+    {
+      "name": "VLESS H2",
+      "type": "vless",
+      "server": "h2.example.com",
+      "port": 443,
+      "uuid": "00000000-0000-4000-8000-000000000012",
+      "tls": {
+        "sni": "h2.example.com",
+        "alpn": [
+          "h2"
+        ]
+      },
+      "transport": {
+        "type": "h2",
+        "path": "/h2",
+        "host": [
+          "h2.example.com"
+        ]
+      }
+    },
+    {
+      "name": "VLESS HTTPUpgrade",
+      "type": "vless",
+      "server": "up.example.com",
+      "port": 443,
+      "uuid": "00000000-0000-4000-8000-000000000013",
+      "tls": {},
+      "transport": {
+        "type": "httpupgrade",
+        "path": "/upgrade",
+        "host": "up.example.com"
+      }
+    },
+    {
+      "name": "VLESS TCP HTTP 伪装",
+      "type": "vless",
+      "server": "198.51.100.30",
+      "port": 80,
+      "uuid": "00000000-0000-4000-8000-000000000014",
+      "transport": {
+        "type": "http",
+        "path": [
+          "/"
+        ],
+        "host": [
+          "a.example.com",
+          "b.example.com"
+        ]
+      },
+      "extra": {
+        "uri": {
+          "packetEncoding": "xudp"
+        }
+      }
+    },
+    {
+      "name": "VMess H2",
+      "type": "vmess",
+      "server": "vh2.example.com",
+      "port": 443,
+      "uuid": "00000000-0000-4000-8000-000000000015",
+      "alterId": 0,
+      "cipher": "aes-128-gcm",
+      "tls": {
+        "sni": "vh2.example.com",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ]
+      },
+      "transport": {
+        "type": "h2",
+        "path": "/vh2",
+        "host": [
+          "vh2.example.com"
+        ]
+      }
+    },
+    {
+      "name": "VMess TCP HTTP",
+      "type": "vmess",
+      "server": "198.51.100.31",
+      "port": 80,
+      "uuid": "00000000-0000-4000-8000-000000000016",
+      "alterId": 0,
+      "cipher": "auto",
+      "transport": {
+        "type": "http",
+        "path": [
+          "/a",
+          "/b"
+        ],
+        "host": [
+          "c.example.com"
+        ]
+      }
+    },
+    {
+      "name": "VMess HTTPUpgrade",
+      "type": "vmess",
+      "server": "vup.example.com",
+      "port": 8080,
+      "uuid": "00000000-0000-4000-8000-000000000017",
+      "alterId": 0,
+      "cipher": "auto",
+      "transport": {
+        "type": "httpupgrade",
+        "path": "/vup",
+        "host": "vup.example.com"
+      },
+      "extra": {
+        "uri": {
+          "test": "keep-me"
+        }
+      }
+    },
+    {
+      "name": "Trojan gRPC",
+      "type": "trojan",
+      "server": "tg.example.com",
+      "port": 443,
+      "password": "p@ss:w0rd",
+      "tls": {
+        "sni": "peer.example.com",
+        "skipCertVerify": true
+      },
+      "transport": {
+        "type": "grpc",
+        "serviceName": "tg-svc"
+      }
+    },
+    {
+      "name": "SS v2ray-plugin",
+      "type": "ss",
+      "server": "v2.example.com",
+      "port": 443,
+      "cipher": "aes-256-gcm",
+      "password": "fake-pass-v2",
+      "plugin": {
+        "type": "v2ray-plugin",
+        "mode": "websocket",
+        "host": "v2.example.com",
+        "path": "/v2",
+        "tls": true
+      }
+    },
+    {
+      "name": "SS unknown plugin",
+      "type": "ss",
+      "server": "kcp.example.com",
+      "port": 443,
+      "cipher": "aes-256-gcm",
+      "password": "fake-pass-kcp",
+      "extra": {
+        "uri": {
+          "plugin": "kcptun;mode=fast2"
+        }
+      }
+    },
+    {
+      "name": "Hysteria2 端口列表",
+      "type": "hysteria2",
+      "server": "2001:db8::20",
+      "port": 443,
+      "password": "fake+pass",
+      "ports": "443,8443,20000-30000",
+      "obfs": {
+        "type": "salamander",
+        "password": "fake-obfs"
+      },
+      "up": "50",
+      "down": "200",
+      "tls": {
+        "sni": "hy.example.com",
+        "alpn": [
+          "h3"
+        ],
+        "certFingerprint": "AA:BB:CC"
+      }
+    },
+    {
+      "name": "Hysteria2 mport",
+      "type": "hysteria2",
+      "server": "mport.example.com",
+      "port": 443,
+      "password": "fake-pass",
+      "ports": "40000-50000",
+      "tls": {}
+    }
+  ],
+  "warnings": [
+    {
+      "level": "warn",
+      "code": "INVALID_PROXY",
+      "protocol": "vless",
+      "line": 13,
+      "message": "invalid vless link: reality requires \"pbk\""
+    },
+    {
+      "level": "warn",
+      "code": "UNSUPPORTED_TRANSPORT",
+      "protocol": "vless",
+      "line": 14,
+      "message": "invalid vless link: transport \"xhttp\" is not supported"
+    },
+    {
+      "level": "warn",
+      "code": "INVALID_PROXY",
+      "protocol": "trojan",
+      "line": 15,
+      "message": "invalid trojan link: missing password"
+    },
+    {
+      "level": "warn",
+      "code": "INVALID_PROXY",
+      "protocol": "hysteria2",
+      "line": 16,
+      "message": "invalid hysteria2 link: invalid port range"
+    },
+    {
+      "level": "warn",
+      "code": "INVALID_PROXY",
+      "protocol": "vmess",
+      "line": 17,
+      "message": "invalid vmess link: \"add\" is required"
+    }
+  ]
+}

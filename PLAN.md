@@ -437,8 +437,8 @@ GET /sub/:token
 - **验收**：`pnpm lint && pnpm typecheck && pnpm test && pnpm build` 全部通过
 
 ### M1 core：IR 与 mihomo
-- [ ] IR zod schema（第 4 节）
-- [ ] 导入器：mihomo YAML；URI（ss、vmess、vless 含 reality、trojan、hysteria2）；Base64 订阅自动识别
+- [x] IR zod schema（第 4 节）
+- [x] 导入器：mihomo YAML；URI（ss、vmess、vless 含 reality、trojan、hysteria2）；Base64 订阅自动识别
 - [ ] mihomo 导出器（含 rule-providers、proxy-providers 风格的规则集输出）
 - [ ] 流水线操作（第 4 节全部）
 - [ ] 预设模板 2 套（极简、常用分流）

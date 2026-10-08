@@ -1,0 +1,455 @@
+{
+  "format": "mihomo-yaml",
+  "proxies": [
+    {
+      "name": "剩余流量：98.5 GB",
+      "type": "ss",
+      "server": "info.example.com",
+      "port": 1,
+      "cipher": "aes-128-gcm",
+      "password": "info"
+    },
+    {
+      "name": "套餐到期：2027-01-01",
+      "type": "ss",
+      "server": "info.example.com",
+      "port": 2,
+      "cipher": "aes-128-gcm",
+      "password": "info"
+    },
+    {
+      "name": "🇭🇰 香港 01 | SS",
+      "type": "ss",
+      "server": "hk01.example.com",
+      "port": 8388,
+      "udp": true,
+      "cipher": "aes-256-gcm",
+      "password": "fake-pass-hk01"
+    },
+    {
+      "name": "🇭🇰 香港 02 | SS2022",
+      "type": "ss",
+      "server": "hk02.example.com",
+      "port": 8389,
+      "udp": true,
+      "cipher": "2022-blake3-aes-128-gcm",
+      "password": "AAAAAAAAAAAAAAAAAAAAAA=="
+    },
+    {
+      "name": "🇯🇵 日本 01 | SS+obfs",
+      "type": "ss",
+      "server": "jp01.example.com",
+      "port": 8443,
+      "cipher": "chacha20-ietf-poly1305",
+      "password": "fake-pass-jp01",
+      "plugin": {
+        "type": "obfs",
+        "mode": "http",
+        "host": "www.bing.com"
+      }
+    },
+    {
+      "name": "🇯🇵 日本 02 | VMess WS",
+      "type": "vmess",
+      "server": "jp02.example.com",
+      "port": 443,
+      "udp": true,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "alterId": 0,
+      "cipher": "auto",
+      "tls": {
+        "sni": "jp02.example.com",
+        "clientFingerprint": "chrome"
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/vmws",
+        "host": "jp02.example.com"
+      }
+    },
+    {
+      "name": "🇺🇸 美国 01 | VMess gRPC",
+      "type": "vmess",
+      "server": "us01.example.com",
+      "port": 443,
+      "udp": true,
+      "uuid": "00000000-0000-4000-8000-000000000002",
+      "alterId": 0,
+      "cipher": "auto",
+      "tls": {
+        "sni": "us01.example.com"
+      },
+      "transport": {
+        "type": "grpc",
+        "serviceName": "vmgrpc"
+      }
+    },
+    {
+      "name": "🇺🇸 美国 02 | VLESS Reality",
+      "type": "vless",
+      "server": "203.0.113.10",
+      "port": 443,
+      "udp": true,
+      "uuid": "00000000-0000-4000-8000-000000000003",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "sni": "www.example.com",
+        "clientFingerprint": "chrome",
+        "reality": {
+          "publicKey": "Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm8",
+          "shortId": "a1b2c3d4"
+        }
+      }
+    },
+    {
+      "name": "🇸🇬 新加坡 01 | VLESS WS",
+      "type": "vless",
+      "server": "sg01.example.com",
+      "port": 443,
+      "udp": true,
+      "uuid": "00000000-0000-4000-8000-000000000004",
+      "tls": {
+        "sni": "sg01.example.com",
+        "clientFingerprint": "chrome"
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/vlws?ed=2048",
+        "host": "sg01.example.com"
+      }
+    },
+    {
+      "name": "🇸🇬 新加坡 02 | Trojan",
+      "type": "trojan",
+      "server": "sg02.example.com",
+      "port": 443,
+      "udp": true,
+      "password": "fake-pass-sg02",
+      "tls": {
+        "sni": "sg02.example.com"
+      }
+    },
+    {
+      "name": "🇹🇼 台湾 01 | Trojan WS",
+      "type": "trojan",
+      "server": "tw01.example.com",
+      "port": 443,
+      "udp": true,
+      "password": "fake-pass-tw01",
+      "tls": {
+        "sni": "tw01.example.com"
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/trws",
+        "host": "tw01.example.com"
+      }
+    },
+    {
+      "name": "🇰🇷 韩国 01 | Hysteria2",
+      "type": "hysteria2",
+      "server": "kr01.example.com",
+      "port": 443,
+      "password": "fake-pass-kr01",
+      "obfs": {
+        "type": "salamander",
+        "password": "fake-obfs-kr01"
+      },
+      "tls": {
+        "sni": "kr01.example.com"
+      }
+    },
+    {
+      "name": "🇩🇪 德国 01 | IPv6",
+      "type": "trojan",
+      "server": "2001:db8::10",
+      "port": 443,
+      "udp": true,
+      "password": "fake-pass-de01",
+      "tls": {
+        "sni": "de01.example.com"
+      }
+    },
+    {
+      "name": "🇬🇧 英国 01 | TUIC",
+      "type": "tuic",
+      "server": "uk01.example.com",
+      "port": 443,
+      "uuid": "00000000-0000-4000-8000-000000000005",
+      "password": "fake-pass-uk01",
+      "congestionController": "bbr",
+      "udpRelayMode": "native",
+      "tls": {
+        "sni": "uk01.example.com",
+        "alpn": [
+          "h3"
+        ]
+      }
+    },
+    {
+      "name": "🇫🇷 法国 01 | AnyTLS",
+      "type": "anytls",
+      "server": "fr01.example.com",
+      "port": 443,
+      "udp": true,
+      "password": "fake-pass-fr01",
+      "tls": {
+        "sni": "fr01.example.com",
+        "clientFingerprint": "chrome"
+      }
+    }
+  ],
+  "config": {
+    "general": {
+      "mixedPort": 7890,
+      "mode": "rule",
+      "logLevel": "info"
+    },
+    "groups": [
+      {
+        "name": "节点选择",
+        "type": "select",
+        "members": [
+          {
+            "kind": "group",
+            "name": "自动选择"
+          },
+          {
+            "kind": "group",
+            "name": "故障转移"
+          },
+          {
+            "kind": "builtin",
+            "name": "DIRECT"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇭🇰 香港 01 | SS"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇭🇰 香港 02 | SS2022"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇯🇵 日本 01 | SS+obfs"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇯🇵 日本 02 | VMess WS"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇺🇸 美国 01 | VMess gRPC"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇺🇸 美国 02 | VLESS Reality"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇸🇬 新加坡 01 | VLESS WS"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇸🇬 新加坡 02 | Trojan"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇹🇼 台湾 01 | Trojan WS"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇰🇷 韩国 01 | Hysteria2"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇩🇪 德国 01 | IPv6"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇬🇧 英国 01 | TUIC"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇫🇷 法国 01 | AnyTLS"
+          }
+        ]
+      },
+      {
+        "name": "自动选择",
+        "type": "url-test",
+        "members": [
+          {
+            "kind": "proxy",
+            "name": "🇭🇰 香港 01 | SS"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇭🇰 香港 02 | SS2022"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇯🇵 日本 01 | SS+obfs"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇯🇵 日本 02 | VMess WS"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇺🇸 美国 01 | VMess gRPC"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇺🇸 美国 02 | VLESS Reality"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇸🇬 新加坡 01 | VLESS WS"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇸🇬 新加坡 02 | Trojan"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇹🇼 台湾 01 | Trojan WS"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇰🇷 韩国 01 | Hysteria2"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇩🇪 德国 01 | IPv6"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇬🇧 英国 01 | TUIC"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇫🇷 法国 01 | AnyTLS"
+          }
+        ],
+        "testUrl": "https://www.gstatic.com/generate_204",
+        "interval": 300,
+        "tolerance": 50
+      },
+      {
+        "name": "故障转移",
+        "type": "fallback",
+        "members": [
+          {
+            "kind": "proxy",
+            "name": "🇯🇵 日本 01 | SS+obfs"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇸🇬 新加坡 01 | VLESS WS"
+          },
+          {
+            "kind": "proxy",
+            "name": "🇰🇷 韩国 01 | Hysteria2"
+          }
+        ],
+        "testUrl": "https://www.gstatic.com/generate_204",
+        "interval": 300
+      },
+      {
+        "name": "香港节点",
+        "type": "url-test",
+        "members": [],
+        "includeAllProxies": true,
+        "filter": {
+          "include": "(?i)港|hk|hong ?kong"
+        },
+        "testUrl": "https://www.gstatic.com/generate_204",
+        "interval": 300
+      }
+    ],
+    "ruleSets": [
+      {
+        "id": "reject",
+        "name": "reject",
+        "behavior": "domain",
+        "sources": {
+          "mihomo": {
+            "url": "https://example.com/rules/reject.yaml",
+            "format": "yaml"
+          }
+        },
+        "interval": 86400,
+        "extra": {
+          "mihomo": {
+            "path": "./ruleset/reject.yaml"
+          }
+        }
+      }
+    ],
+    "rules": [
+      {
+        "type": "RULE-SET",
+        "value": "reject",
+        "target": "REJECT"
+      },
+      {
+        "type": "DOMAIN-SUFFIX",
+        "value": "local",
+        "target": "DIRECT"
+      },
+      {
+        "type": "DOMAIN",
+        "value": "example-direct.com",
+        "target": "DIRECT"
+      },
+      {
+        "type": "DOMAIN-KEYWORD",
+        "value": "google",
+        "target": "节点选择"
+      },
+      {
+        "type": "IP-CIDR",
+        "value": "192.168.0.0/16",
+        "noResolve": true,
+        "target": "DIRECT"
+      },
+      {
+        "type": "IP-CIDR6",
+        "value": "fe80::/10",
+        "noResolve": true,
+        "target": "DIRECT"
+      },
+      {
+        "type": "AND",
+        "children": [
+          {
+            "type": "DOMAIN-SUFFIX",
+            "value": "example.org"
+          },
+          {
+            "type": "DST-PORT",
+            "value": "443"
+          }
+        ],
+        "target": "香港节点"
+      },
+      {
+        "type": "GEOSITE",
+        "value": "cn",
+        "target": "DIRECT"
+      },
+      {
+        "type": "GEOIP",
+        "value": "CN",
+        "target": "DIRECT"
+      },
+      {
+        "type": "MATCH",
+        "target": "节点选择"
+      }
+    ]
+  },
+  "warnings": []
+}
