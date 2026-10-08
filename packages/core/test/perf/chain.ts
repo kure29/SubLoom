@@ -18,7 +18,15 @@ function mihomoProxy(i: number): Record<string, unknown> {
   const server = `node${i}.example.com`
   switch (i % 5) {
     case 0:
-      return { name, type: 'ss', server, port: 8388, cipher: 'aes-256-gcm', password: `p${i}`, udp: true }
+      return {
+        name,
+        type: 'ss',
+        server,
+        port: 8388,
+        cipher: 'aes-256-gcm',
+        password: `p${i}`,
+        udp: true,
+      }
     case 1:
       return {
         name,
