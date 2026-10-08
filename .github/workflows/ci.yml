@@ -45,7 +45,8 @@ jobs:
           {
             echo '### @subloom/core 性能基准（500 节点，单位 ms）'
             echo '```'
-            grep -E '^ +(name|·) ' bench.txt
+            # CI 中 vitest 输出带颜色，先去掉 ANSI 转义序列
+            sed -E 's/\x1b\[[0-9;]*m//g' bench.txt | grep -E '^ +(name|·) '
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
