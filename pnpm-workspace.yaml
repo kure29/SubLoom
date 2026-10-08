@@ -8,6 +8,8 @@ onlyBuiltDependencies:
   - workerd
 
 catalog:
+  # 固定版本：0.23.0 发布不足两周；需要 vitest ^4.1
+  '@cloudflare/vitest-pool-workers': 0.22.0
   '@cloudflare/workers-types': ^5.20261008.1
   # 固定版本：2.1.2 起的版本发布不足两周
   '@hono/node-server': 2.1.1

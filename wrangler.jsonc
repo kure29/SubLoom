@@ -1,0 +1,24 @@
+// Cloudflare Workers 部署配置（放在仓库根目录，Deploy 按钮与 GitHub Actions 共用）。见 PLAN.md 第 6 节。
+// Workers 专有代码只在 apps/worker；D1、KV 不写 ID，首次部署时由 wrangler 自动创建。
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "subloom",
+  "main": "apps/worker/src/index.ts",
+  // 不晚于 @cloudflare/vitest-pool-workers 自带的 workerd 支持的日期，测试与线上行为一致
+  "compatibility_date": "2026-08-15",
+  "d1_databases": [{ "binding": "DB", "database_name": "subloom" }],
+  "kv_namespaces": [{ "binding": "BLOBS" }],
+  // 每 10 分钟检查一次到期的订阅（与 Node 的 REFRESH_INTERVAL_MIN 默认值一致）
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "assets": {
+    "directory": "apps/web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/sub/*", "/healthz"]
+  },
+  // Workers Logs：自动生成的管理令牌、错误日志、每次请求的 CPU 时间都在控制台中查看
+  "observability": { "enabled": true },
+  // ADMIN_TOKEN、SECRET_KEY 用 `wrangler secret put` 或在控制台中设置为 Secret；CORS_ORIGINS、
+  // ALLOW_PRIVATE_FETCH、PUBLIC_URL、TRUST_PROXY 在控制台中设置为变量（见 docs/deploy-workers.md）。
+  // 部署时保留控制台中设置的变量（默认会被 wrangler deploy 覆盖；Secret 总是保留）
+  "keep_vars": true
+}

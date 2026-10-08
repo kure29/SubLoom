@@ -1,7 +1,0 @@
-// Workers 入口配置。D1、KV、Cron Triggers、静态资源在 M5 中添加。
-{
-  "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "subloom",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-10-01"
-}

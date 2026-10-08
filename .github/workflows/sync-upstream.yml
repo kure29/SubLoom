@@ -1,0 +1,47 @@
+# 只在 fork 中运行：每天把上游仓库的默认分支同步到 fork，有新提交时触发部署。见 PLAN.md 第 6 节。
+# GitHub 默认不在 fork 中运行定时 workflow，需要先在 fork 的 Actions 页面启用。
+# 上游改动了 .github/workflows 中的文件时，GITHUB_TOKEN 没有权限同步，请在 GitHub 页面上点 "Sync fork"。
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync:
+    name: sync fork with upstream
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      # 定时事件的 payload 中不一定有仓库信息，向 API 查询是否为 fork 及默认分支
+      - name: Check repository
+        id: repo
+        run: |
+          info=$(gh api "repos/$REPO" --jq '{fork, branch: .default_branch}')
+          echo "fork=$(echo "$info" | jq -r '.fork')" >> "$GITHUB_OUTPUT"
+          echo "branch=$(echo "$info" | jq -r '.branch')" >> "$GITHUB_OUTPUT"
+
+      - name: Merge upstream
+        id: merge
+        if: steps.repo.outputs.fork == 'true'
+        env:
+          BRANCH: ${{ steps.repo.outputs.branch }}
+        run: |
+          result=$(gh api -X POST "repos/$REPO/merge-upstream" -f branch="$BRANCH")
+          echo "$result"
+          # merge_type 为 none 表示已是最新
+          echo "merge_type=$(echo "$result" | jq -r '.merge_type')" >> "$GITHUB_OUTPUT"
+
+      # GITHUB_TOKEN 推送的提交不会触发其他 workflow，因此显式触发部署
+      - name: Trigger deployment
+        if: steps.repo.outputs.fork == 'true' && steps.merge.outputs.merge_type != 'none'
+        env:
+          BRANCH: ${{ steps.repo.outputs.branch }}
+        run: gh workflow run deploy-workers.yml --repo "$REPO" --ref "$BRANCH"

@@ -11,10 +11,28 @@
     "format": "biome check --write .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "build": "turbo run build"
+    "build": "turbo run build",
+    "deploy": "wrangler deploy"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
-    "turbo": "^2.11.7"
+    "turbo": "^2.11.7",
+    "wrangler": "catalog:"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "D1 数据库：订阅源、配置、输出链接等全部数据（首次请求时自动迁移）。"
+      },
+      "BLOBS": {
+        "description": "KV 命名空间：订阅原文、解析后的节点和生成好的配置（缓存）。"
+      },
+      "ADMIN_TOKEN": {
+        "description": "管理令牌（可留空：首次请求时自动生成并打印到 Workers Logs）。"
+      },
+      "SECRET_KEY": {
+        "description": "加密订阅链接的密钥，**强烈建议设置**并妥善保存：留空时自动生成并与密文存在同一个数据库中；添加订阅后再更换会导致无法解密。"
+      }
+    }
   }
 }

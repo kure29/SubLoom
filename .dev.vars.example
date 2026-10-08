@@ -1,0 +1,5 @@
+# Deploy to Cloudflare 按钮从这里读取需要填写的 Secret（见 docs/deploy-workers.md）。
+# 本地 `pnpm --filter @subloom/worker dev` 时可复制为 .dev.vars 使用。
+# 两者都可以留空（自动生成），但强烈建议设置 SECRET_KEY：自动生成的密钥与密文存在同一个数据库中。
+ADMIN_TOKEN=
+SECRET_KEY=

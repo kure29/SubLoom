@@ -18,6 +18,10 @@ export interface PlatformEnv {
   secretKey?: string | undefined
   corsOrigins: string[]
   allowPrivateFetch: boolean
+  /** PUBLIC_URL：设置后所有对外链接都用它生成（不带末尾的 /） */
+  publicUrl?: string | undefined
+  /** TRUST_PROXY：为 true 时才读取 X-Forwarded-* 头 */
+  trustProxy: boolean
 }
 
 export interface BlobStore {

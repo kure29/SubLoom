@@ -1,7 +1,9 @@
 import { outputs } from '@subloom/db'
 import { eq } from 'drizzle-orm'
 import { randomToken } from '../crypto.js'
+import type { PlatformEnv } from '../platform.js'
 import type { Ctx } from '../sources/service.js'
+import { publicLink } from '../urls.js'
 import type { OutputOptions, OutputTarget } from '../validation.js'
 
 // 输出链接的存储。见 PLAN.md 5.2、5.3。
@@ -15,6 +17,8 @@ export interface OutputDto {
   /** 访问凭据：/sub/<token> */
   token: string
   path: string
+  /** 设置了 PUBLIC_URL 时的完整链接，否则为 null（由前端用后端地址拼接） */
+  url: string | null
   options: OutputOptions
   lastAccessAt: number | null
   createdAt: number
@@ -30,13 +34,15 @@ export function maskToken(token: string): string {
   return token.length > 4 ? `${token.slice(0, 4)}…` : '…'
 }
 
-export function toDto(row: OutputRow): OutputDto {
+export function toDto(row: OutputRow, env: Pick<PlatformEnv, 'publicUrl'>): OutputDto {
+  const path = `/sub/${row.token}`
   return {
     id: row.id,
     profileId: row.profileId,
     target: row.target as OutputTarget,
     token: row.token,
-    path: `/sub/${row.token}`,
+    path,
+    url: publicLink(env, path),
     options: JSON.parse(row.optionsJson) as OutputOptions,
     lastAccessAt: row.lastAccessAt,
     createdAt: row.createdAt,

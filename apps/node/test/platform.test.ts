@@ -66,7 +66,7 @@ describe('createNodePlatform', () => {
   it('在数据目录中创建 SQLite 数据库和 blobs 目录，重启后数据保留', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const env = { secretKey: 'k', corsOrigins: [], allowPrivateFetch: false }
+    const env = { secretKey: 'k', corsOrigins: [], allowPrivateFetch: false, trustProxy: false }
     const first = await createNodePlatform(join(dir, 'data'), env)
     await bootstrap(first.platform)
     await first.platform.blobs.put('src:x:nodes', '[]')

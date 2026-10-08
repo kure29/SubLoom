@@ -352,7 +352,11 @@ interface Platform {
   name: 'node' | 'workers'        // 运行平台，/api/meta 返回给前端
   db: SubloomDb                   // @subloom/db 导出的类型：better-sqlite3 或 D1 的 Drizzle 实例
   blobs: BlobStore                // Node: 文件系统；Workers: KV
-  env: { adminToken?: string; secretKey?: string; corsOrigins: string[]; allowPrivateFetch: boolean }
+  env: {
+    adminToken?: string; secretKey?: string; corsOrigins: string[]; allowPrivateFetch: boolean
+    publicUrl?: string              // PUBLIC_URL：设置后所有对外链接都用它生成，见 5.3"对外链接"
+    trustProxy: boolean             // TRUST_PROXY：为 true 时才读取 X-Forwarded-* 头
+  }
   waitUntil(p: Promise<unknown>): void // Node 下直接执行不等待；Workers 用 ctx.waitUntil
   resolveHost?(host: string): Promise<string[]> // 仅 Node 实现：DNS 解析出的全部地址，私有地址判断在 server 中统一完成
 }
@@ -364,7 +368,8 @@ interface BlobStore {
 }
 ```
 
-- **初始化**：server 导出 `bootstrap(platform)`（幂等，同一个 platform 只执行一次）：执行数据库迁移 → 准备管理令牌 → 准备加密密钥（见 5.5）。`createApp` 的中间件在每个请求前等待它完成，因此 Workers 在首次请求时自动初始化；Node 入口在启动时先调用一次，让自动生成的令牌在启动日志中打印出来。
+- **初始化**：server 导出 `bootstrap(platform)`（幂等，同一份数据库（`platform.db` 对象）与环境变量（`platform.env` 对象）只执行一次；Workers 每个请求的 `waitUntil` 不同，因此每个请求构造新的 platform，但复用同一个 `db` 和 `env` 对象，不会每个请求都重新初始化）：执行数据库迁移 → 准备管理令牌 → 准备加密密钥（见 5.5）。`createApp` 的中间件在每个请求前等待它完成，因此 Workers 在首次请求时自动初始化；Node 入口在启动时先调用一次，让自动生成的令牌在启动日志中打印出来。
+- **环境变量解析**：server 导出 `parseEnv(vars)`，把字符串形式的环境变量（Node 的 `process.env`、Workers 的 `env` 中的 vars 和 secrets）解析为 `PlatformEnv`，两个入口共用，保证行为一致。空字符串视为未设置；布尔值只有 `true`、`1`、`yes`（不区分大小写）为真；`PUBLIC_URL` 必须是不带查询参数和片段的 http(s) URL，否则报错（Node 启动失败；Workers 请求返回 500 并在日志中说明）。
 - 定时任务：server 导出 `runScheduledRefresh(platform)`，逐个刷新到期的远程订阅（`last_fetched_at + ttl_sec` 已过，从未拉取过的也算），串行执行。Node 用 `setInterval` 调用（间隔 `REFRESH_INTERVAL_MIN`，上一轮未结束时跳过），Workers 在 `scheduled` 事件中调用。
 
 ### 5.2 数据表（`packages/db`）
@@ -430,7 +435,7 @@ POST   /api/restore                  用备份全量替换现有数据
 - **meta**：`{ name: 'subloom', version, coreVersion, platform: 'node' | 'workers', secretKeySource: 'env' | 'generated', targets: { <target>: Capabilities } }`。`targets` 只列出已实现的导出器。`secretKeySource` 为 `generated` 时前端提示用户设置 `SECRET_KEY`（原因见 5.5）。
 - **profiles**：`POST` 的请求体为 `{ ir: Profile, pipeline?: PipelineOp[], sourceIds?: string[] }`（`ir` 用 `ProfileSchema` 校验，`pipeline` 默认 `[]`，`sourceIds` 默认 `[]`，必须是已存在的订阅源且不重复），`PATCH` 可修改其中任意几项。返回 `{ profile: { id, name, ir, pipeline, sourceIds, createdAt, updatedAt } }`，`name` 即 `ir.name`；列表不返回 `ir` 和 `pipeline`。删除 profile 时同时删除它的输出及其缓存。
 - **preview**：`target` 为已实现的导出器（`mihomo`、`surge`）。请求体可选，为 `{ ir?, pipeline?, sourceIds?, options? }`，给出的项覆盖已保存的值（前端实时预览尚未保存的编辑），`options` 为导出选项（不含 `proxyProvider`）。按 `sourceIds` 的顺序读取各订阅源的节点缓存并拼接 → 流水线 → 导出，不使用也不写入生成结果缓存。返回 `{ text, warnings: CompatWarning[], pipelineWarnings: PipelineWarning[], sources: [{ id, nodeCount }] }`，还没有节点缓存的订阅源 `nodeCount` 为 null（生成时跳过）。
-- **outputs**：`POST` 的请求体为 `{ profileId, target, options? }`。`target` 为已实现的导出器或 `auto`；`shadowrocket`、`loon` 的导出器实现前返回 400。`options` 为 `{ export?: ExportOptions（不含 proxyProvider）, nodes?: 'inline' | 'provider' }`，`nodes` 默认 `inline`，`provider` 只影响 mihomo（见第 4 节"mihomo 导出器"），provider 指向 `/sub/<token>/proxies`。`PATCH` 可修改 `target`、`options`。返回 `{ output: { id, profileId, target, token, path: '/sub/<token>', options, lastAccessAt, createdAt } }`。`rotate` 生成新 token，旧链接立即失效（404）。删除和 rotate 时清除该输出的生成结果缓存。
+- **outputs**：`POST` 的请求体为 `{ profileId, target, options? }`。`target` 为已实现的导出器或 `auto`；`shadowrocket`、`loon` 的导出器实现前返回 400。`options` 为 `{ export?: ExportOptions（不含 proxyProvider）, nodes?: 'inline' | 'provider' }`，`nodes` 默认 `inline`，`provider` 只影响 mihomo（见第 4 节"mihomo 导出器"），provider 指向 `/sub/<token>/proxies`。`PATCH` 可修改 `target`、`options`。返回 `{ output: { id, profileId, target, token, path: '/sub/<token>', url, options, lastAccessAt, createdAt } }`，`url` 为设置了 `PUBLIC_URL` 时的完整链接（`PUBLIC_URL` + `path`），否则为 null（由前端用后端地址拼接）。`rotate` 生成新 token，旧链接立即失效（404）。删除和 rotate 时清除该输出的生成结果缓存。
 
 公开接口（无需认证，靠 token）：
 
@@ -455,7 +460,13 @@ GET /healthz               { status: 'ok' }；初始化或数据库访问失败�
 
 `/sub/:token/proxies` 同样使用生成结果缓存（target 记为 `proxies`），响应头同上（没有 MANAGED-CONFIG）。`proxy-providers` 的 `interval` 与 `profile-update-interval` 相同（单位为秒）。
 
-**当前 URL**：取请求的 URL；反向代理后面的 Node 部署按 `X-Forwarded-Proto`、`X-Forwarded-Host` 改写协议和主机名。只影响返回给该请求者的内容（MANAGED-CONFIG 行在响应时添加；provider 地址参与缓存键，见下），不会污染其他请求的结果。
+**对外链接**（MANAGED-CONFIG 中的当前 URL、proxy-providers 的地址、输出的 `url` 字段）按以下顺序生成：
+
+1. 设置了 `PUBLIC_URL`（如 `https://sub.example.com` 或带路径前缀的 `https://example.com/subloom`）：`PUBLIC_URL` 去掉末尾的 `/` 后拼接请求路径（和查询参数）。请求头一概不看。
+2. 否则 `TRUST_PROXY=true` 时，按 `X-Forwarded-Proto`（只接受 `http`、`https`）、`X-Forwarded-Host`（只接受合法的主机名和端口）改写请求 URL 的协议和主机名。只应在 SubLoom 前面确实有反向代理、且代理会覆盖这两个头时开启，否则任何人都能伪造。
+3. 都未设置：用请求的 URL（Node 下来自请求的 `Host` 头；Workers 下为实际访问的地址）。
+
+`PUBLIC_URL`、`TRUST_PROXY` 默认都不设置，Node 和 Workers 都支持。对外链接只影响返回给该请求者的内容（MANAGED-CONFIG 行在响应时添加；provider 地址参与缓存键，见下），不会污染其他请求的结果。
 
 **User-Agent 识别**（不区分大小写，按顺序匹配，测试表覆盖常见客户端的真实 UA）：
 
@@ -525,6 +536,10 @@ GET /healthz               { status: 'ok' }；初始化或数据库访问失败�
 | 不支持 eval | 自定义脚本功能仅 Docker 提供，前端根据 `/api/meta` 的平台信息隐藏 |
 | 出口 IP 属于 Cloudflare，部分机场会拦截 | 文档说明，建议此类用户使用 Docker |
 | D1 有单行大小限制 | 大内容放 KV |
+| KV 的 `expirationTtl` 最小 60 秒 | KV BlobStore 把更短的 TTL 提高到 60 秒（目前没有使用 TTL 的 key） |
+| KV 免费版每天 1000 次写入、10 万次读取；写入最终一致（其他地区最多约 60 秒后可见） | 生成结果只在缓存键变化时写入；每次刷新订阅写 2 个 key。订阅很多或刷新很频繁时文档中提示可能超出免费额度 |
+| 定时任务（Cron Triggers）同样受 CPU 时间限制 | 每 10 分钟触发一次，只刷新到期的订阅；解析 500 节点的订阅在免费版上可能超限（见 M5 的实测），超限时文档中说明 |
+| 运行时里的计时函数在同步执行期间不前进（防止计时攻击），代码中无法自己测量 CPU 时间 | 在 Cloudflare 控制台查看每次请求的 CPU 时间（见 M5 验收步骤） |
 
 ---
 
@@ -536,18 +551,45 @@ GET /healthz               { status: 'ok' }；初始化或数据库访问失败�
 - 多架构：`linux/amd64`、`linux/arm64`（覆盖 NAS 和树莓派）。
 - 发布到 GHCR，镜像名 `ghcr.io/<owner>/subloom`（可选同时发布到 Docker Hub）。
 - 数据目录 `/data`（SQLite 数据库 + 缓存文件），通过 volume 挂载。
-- 环境变量：`ADMIN_TOKEN`、`SECRET_KEY`（文档推荐设置，见 5.5"密钥来源"）、`PORT`（默认 3000）、`DATA_DIR`（默认 `./data`，镜像中为 `/data`）、`CORS_ORIGINS`（逗号分隔）、`ALLOW_PRIVATE_FETCH`、`REFRESH_INTERVAL_MIN`（定时刷新的检查间隔，默认 10，0 为关闭）。全部可选。
+- 环境变量：`ADMIN_TOKEN`、`SECRET_KEY`（文档推荐设置，见 5.5"密钥来源"）、`PORT`（默认 3000）、`DATA_DIR`（默认 `./data`，镜像中为 `/data`）、`CORS_ORIGINS`（逗号分隔）、`ALLOW_PRIVATE_FETCH`、`PUBLIC_URL`、`TRUST_PROXY`（见 5.3"对外链接"）、`REFRESH_INTERVAL_MIN`（定时刷新的检查间隔，默认 10，0 为关闭）。全部可选。
 - 数据目录结构：`subloom.db`（SQLite）、`blobs/`（文件 BlobStore，一个 key 一个文件，文件名为 key 的百分号编码，先写临时文件再改名）。
 - 启动时自动执行数据库迁移。
 - 提供 `HEALTHCHECK` 和 `docker-compose.yml` 示例。
 
 ### Cloudflare Workers
 
-- `apps/worker/wrangler.jsonc` 声明 D1、KV 绑定，Cron Triggers，以及静态资源（Workers Static Assets 托管前端）。
-- README 中放 "Deploy to Cloudflare" 按钮，目标是让用户全程不用命令行完成部署。实现时确认该按钮对 D1/KV 的自动创建和绑定支持情况，不支持的部分在文档中补充手动步骤。
-- 首次请求时自动执行 D1 迁移（或在部署流程中执行），保证用户升级时零操作。
-- 部署文档推荐用 `wrangler secret put SECRET_KEY`（或在 Cloudflare 控制台中添加 Secret）设置 `SECRET_KEY`，见 5.5"密钥来源"。
-- 升级方式：用户 fork 仓库，通过 GitHub Actions 定期同步上游并自动部署。提供该 workflow 模板。
+**配置**：`wrangler.jsonc` 放在**仓库根目录**（Deploy 按钮只能以仓库根目录或一个自包含全部依赖的子目录为根，而 `apps/worker` 依赖工作区中的 `@subloom/server` 等包；见下方"Deploy to Cloudflare 按钮"）。Workers 专有代码仍然只在 `apps/worker`：
+
+- `main`：`apps/worker/src/index.ts`（`fetch` 与 `scheduled` 处理器）。
+- D1 绑定 `DB`（`database_name: subloom`）、KV 绑定 `BLOBS`，**不写资源 ID**，由 wrangler 的自动创建（automatic provisioning）在首次部署时创建，之后的部署即使配置中没有 ID 也继续绑定同一个资源（[官方说明](https://developers.cloudflare.com/changelog/2025-10-24-automatic-resource-provisioning/)）。按 wrangler 4.148 的实现：D1 先沿用已部署 Worker 上同名绑定的数据库，否则按名称连接账号中已有的 `subloom` 数据库，都没有才新建；KV 沿用已部署 Worker 上的绑定，否则新建 `subloom-blobs`。因此在控制台删除 Worker 后再部署，D1（全部数据）会重新连上；KV 只存缓存，新建后由刷新订阅重新生成。CI 中不会把 ID 写回配置文件。
+- Cron Triggers：每 10 分钟（`*/10 * * * *`，与 Node 的 `REFRESH_INTERVAL_MIN` 默认值一致）调用 `runScheduledRefresh`，用 `ctx.waitUntil` 等待完成。
+- 静态资源：`assets.directory` 指向 `apps/web/dist`（构建产物），`not_found_handling: single-page-application`；`run_worker_first` 为 `/api/*`、`/sub/*`、`/healthz`，这些路径总是交给 Worker，其余路径优先返回静态文件。
+- `compatibility_date` 不晚于 `@cloudflare/vitest-pool-workers` 自带的 workerd 支持的日期（目前 `2026-08-15`），保证 Workers 测试与线上的运行时行为一致；升级 pool-workers 时一起调整。
+- `observability.enabled: true`：开启 Workers Logs（自动生成的管理令牌、错误日志、每次请求的 CPU 时间都在这里查看）。
+- 普通变量（`CORS_ORIGINS`、`ALLOW_PRIVATE_FETCH`、`PUBLIC_URL`、`TRUST_PROXY`）由用户在控制台设置，默认不设置；`keep_vars: true` 让部署时保留控制台中设置的变量（否则 `wrangler deploy` 会覆盖它们；Secret 总是保留）。
+- 根 `package.json` 的 `cloudflare.bindings` 为 Deploy 按钮提供各绑定和 Secret 的说明。
+
+**迁移**：首次请求时（`bootstrap`）自动执行。D1 不支持交互式事务，每个迁移连同迁移记录用 `db.batch` 一次提交（D1 的 batch 在一个事务中执行，任一语句失败整体回滚）；多个实例并发执行时，后提交的一方失败回滚后重新确认该迁移已执行即可。用户升级时零操作。
+
+**密钥**：`ADMIN_TOKEN`、`SECRET_KEY` 由用户手动设置为 Secret，部署 workflow 不接触它们：本地执行 `npx wrangler secret put SECRET_KEY`（`ADMIN_TOKEN` 同理），或在控制台 Workers & Pages → subloom → Settings → Variables and Secrets 中添加，类型选 Secret（两者等价）。未设置时的行为与 Node 一致：自动生成，管理令牌只在首次请求时打印一次到日志（在控制台 Workers Logs 中查看），`/api/meta` 的 `secretKeySource` 为 `generated`。`SECRET_KEY` 应在添加订阅之前设置（见 5.5"密钥来源"）。
+
+**GitHub Actions 部署**（`.github/workflows/deploy-workers.yml`）：
+
+- 触发：main 分支上的 CI 成功后自动部署，也可在 Actions 页面手动触发（workflow_dispatch）。仓库没有配置 `CLOUDFLARE_API_TOKEN` Secret 时跳过（不报错），因此不部署的 fork 不受影响。
+- 步骤：安装依赖 → `pnpm build`（含前端静态文件）→ `pnpm run deploy`（根目录的 `wrangler deploy`）。
+- 凭据：用户在 GitHub 仓库的 Secrets 中设置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`，只在部署步骤中通过环境变量传给 wrangler。
+- API Token 的最小权限（Account 级别，只授予要部署的那个账号）：**Workers Scripts: Edit**（上传 Worker、静态资源、Cron Triggers、启用 workers.dev 域名）、**D1: Edit**（首次部署自动创建数据库）、**Workers KV Storage: Edit**（首次部署自动创建 KV 命名空间）。迁移在运行时由 Worker 自己执行，不需要额外的 D1 权限；不需要任何 Zone 权限（使用 workers.dev 域名时）。绑定自定义域名时另加该 Zone 的 **Workers Routes: Edit**。
+- **fork 同步上游**（`.github/workflows/sync-upstream.yml`）：只在 fork 中运行，每天一次（也可手动触发），用 GitHub 的 merge-upstream 接口把上游的默认分支同步到 fork，有新提交时触发部署 workflow（`GITHUB_TOKEN` 推送的提交不会触发其他 workflow，因此显式 dispatch）。上游改动了 workflow 文件时 `GITHUB_TOKEN` 没有权限同步，需要在 GitHub 页面上点 "Sync fork"。GitHub 默认不在 fork 中运行定时 workflow，需要先在 fork 的 Actions 页面启用。
+
+**Deploy to Cloudflare 按钮**（以[官方文档](https://developers.cloudflare.com/workers/platform/deploy-buttons/)为准）：
+
+- 按钮读取仓库根目录的 wrangler 配置，用 Workers Builds 构建并部署（构建命令、部署命令取自根 `package.json` 的 `build`、`deploy` 脚本），D1、KV 由按钮流程自动创建，用户可以在页面上修改 Worker 名和资源名。
+- D1 迁移：官方建议在 `deploy` 脚本中执行；SubLoom 在首次请求时自动迁移，不需要。
+- Secrets：按钮从 `.dev.vars.example` 读取需要的 Secret，在页面上提示用户填写；SubLoom 在其中列出 `ADMIN_TOKEN`、`SECRET_KEY`。
+- 按钮会在用户自己的 GitHub / GitLab 账号下**新建一个仓库**（复制，而不是 fork），并把新建资源的 ID 写入新仓库的 wrangler 配置；之后推送到该仓库时由 Workers Builds 自动部署。
+- 限制：源仓库必须公开（github.com 或 gitlab.com）；新仓库不是 fork，不能用"fork 同步上游"的 workflow，升级需要用户自己把上游合并进来（文档中写明命令）；只支持一个 Worker 应用。做不到的部分（自定义域名、`PUBLIC_URL` 等变量、事后修改 Secret）在部署文档中写明手动步骤。
+
+**部署文档**：`docs/deploy-workers.md`（M8 的 README 中链接到它），包含以上全部内容和首次部署、升级、查看日志与 CPU 时间、常见问题。
 
 ### 官方前端
 
@@ -631,12 +673,21 @@ GET /healthz               { status: 'ok' }；初始化或数据库访问失败�
 - **验收**：mihomo 客户端和 Surge 能通过输出链接导入配置，并显示流量信息
 
 ### M5 Workers 入口
-- [ ] `apps/worker`：D1、KV BlobStore、Cron Triggers、waitUntil
-- [ ] wrangler 配置、静态资源托管、自动迁移
-- [ ] API 集成测试在 Workers 环境下全部通过
-- [ ] 在真实的 Workers 环境（非本地 workerd 模拟）中重测 500 节点完整链路的 CPU 耗时（本地 Node 的数字不能完全代表 Workers），结果写入 5.6；超出免费版限制时在部署文档中说明
-- [ ] Deploy 按钮与部署文档
-- **验收**：Fork 后可一键部署到 Cloudflare，功能与 Node 版一致
+- [x] M4 遗留：`PUBLIC_URL`、`TRUST_PROXY`（5.3"对外链接"），Node 与 Workers 共用 `parseEnv`
+- [x] `apps/worker`：D1、KV BlobStore、Cron Triggers、waitUntil、platform 名称
+- [x] wrangler 配置（仓库根目录）、静态资源托管、D1 自动迁移（`db.batch`）
+- [x] API 集成测试在 Workers 环境下全部通过（`@cloudflare/vitest-pool-workers`，D1、KV 由 miniflare 模拟）
+- [x] GitHub Actions 部署 workflow、fork 同步上游 workflow
+- [ ] 在真实的 Workers 环境（非本地 workerd 模拟）中重测 500 节点完整链路的 CPU 耗时（本地 Node 的数字不能完全代表 Workers），结果写入 5.6；超出免费版限制时在部署文档中说明（需要部署到用户的账号后按验收步骤 4 测量，测量工具 `scripts/workers-perf.mjs` 已就绪）
+- [x] Deploy 按钮与部署文档（`docs/deploy-workers.md`）
+- **验收**：Fork 后可一键部署到 Cloudflare，功能与 Node 版一致。步骤：
+  1. 在 GitHub 仓库的 Secrets 中设置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`，手动运行 Deploy Workers workflow（或推送到 main），部署成功；控制台中出现自动创建的 D1、KV。
+  2. 设置 `SECRET_KEY`、`ADMIN_TOKEN` Secret；访问 `/healthz` 返回 ok，`/api/meta` 的 `platform` 为 `workers`、`secretKeySource` 为 `env`。
+  3. 添加订阅、刷新、建 profile 和输出，客户端通过输出链接导入（同 M4 的验收）；等待一次 Cron Trigger 后订阅按到期时间刷新。
+  4. **CPU 时间**：Workers 运行时里的计时函数在同步执行期间不前进，不能在代码中自己计时，只能在控制台查看。先运行 `node scripts/workers-perf.mjs`（环境变量 `SUBLOOM_URL`、`SUBLOOM_ADMIN_TOKEN`，需要先 `pnpm build`）：它在部署好的实例上创建一个 500 节点的本地订阅，依次请求刷新（解析）、preview（流水线 + 导出 mihomo / Surge）和输出链接（缓存命中），各若干次，最后删除创建的数据。然后在控制台查看：
+     - Workers & Pages → subloom → **Metrics**：**CPU Time per execution** 图表按分位数（中位数、P90、P99 等）展示一段时间内的 CPU 时间。
+     - Workers & Pages → subloom → **Observability**（Workers Logs）：每次请求的调用日志（Invocation Log）中有该次请求的 **CPU Time** 和 **Wall Time**；在 Query Builder 中按请求路径过滤，对 CPU Time 取中位数、P90 等，即可分别得到解析、导出、缓存命中三种请求的 CPU 时间。超出限制的请求结果为 `exceededCpu`。
+     - 把结果写入 5.6，超出免费版 10ms 时在部署文档中说明（升级付费计划或改用 Docker）。
 
 ### M6 Docker
 - [ ] 多阶段 Dockerfile、多架构构建、发布到 GHCR

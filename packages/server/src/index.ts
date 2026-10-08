@@ -2,6 +2,7 @@ export { createApp } from './app.js'
 export { type Backup, BackupSchema } from './backup.js'
 export { createMemoryBlobStore } from './blob-store.js'
 export { bootstrap, type Runtime } from './bootstrap.js'
+export { parseEnv } from './env.js'
 export type { ErrorCode, SourceErrorCode } from './errors.js'
 export {
   DEFAULT_MAX_BYTES,

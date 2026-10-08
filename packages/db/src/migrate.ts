@@ -38,8 +38,8 @@ export async function migrate(
   const pending = migrations.filter((m) => !applied.has(m.tag))
   if (pending.length === 0) return []
 
-  // D1 不支持交互式事务，需要改用 db.batch，M5 中实现并测试
-  if ('batch' in db) throw new Error('migrate: async drivers (D1) are not supported yet')
+  if ('batch' in db) return migrateBatch(db as unknown as BatchDb, pending)
+
   const syncDb = db as unknown as BaseSQLiteDatabase<'sync', unknown>
   const done: string[] = []
   for (const m of pending) {
@@ -53,6 +53,39 @@ export async function migrate(
       )
       done.push(m.tag)
     })
+  }
+  return done
+}
+
+/** D1 等异步驱动：db.batch 中的语句在一个事务中执行，任一语句失败整体回滚 */
+type BatchItem = ReturnType<SubloomDb['run']>
+interface BatchDb {
+  run: SubloomDb['run']
+  all: SubloomDb['all']
+  batch(items: [BatchItem, ...BatchItem[]]): Promise<unknown>
+}
+
+/**
+ * D1 不支持交互式事务：每个迁移的语句连同迁移记录用 db.batch 一次提交。
+ * 多个实例并发执行时，后提交的一方因表已存在或记录重复而失败回滚，确认该迁移已被执行后继续。
+ */
+async function migrateBatch(db: BatchDb, pending: readonly Migration[]): Promise<string[]> {
+  const done: string[] = []
+  for (const m of pending) {
+    // 迁移语句在前，迁移记录在后。drizzle 的 D1 batch 不支持带绑定参数的原始 SQL，
+    // 因此迁移记录写成字面量（tag 来自内嵌的迁移列表，单引号按 SQL 规则转义）
+    const tag = `'${m.tag.replaceAll("'", "''")}'`
+    const batch: [BatchItem, ...BatchItem[]] = [
+      db.run(sql.raw(`INSERT INTO \`${TABLE}\` (tag, applied_at) VALUES (${tag}, ${Date.now()})`)),
+    ]
+    batch.unshift(...splitStatements(m.sql).map((s) => db.run(sql.raw(s))))
+    try {
+      await db.batch(batch)
+      done.push(m.tag)
+    } catch (e) {
+      const rows = await db.all(sql`SELECT 1 FROM ${sql.identifier(TABLE)} WHERE tag = ${m.tag}`)
+      if (rows.length === 0) throw e
+    }
   }
   return done
 }
