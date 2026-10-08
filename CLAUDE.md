@@ -9,6 +9,8 @@ SubLoom：可视化代理配置生成与托管工具。**`PLAN.md` 是唯一的�
 - **不确定就问**：方案里没写清楚、需要做决定的地方，先列出来问用户，不要自己猜。
 - **勾选进度**：每个里程碑完成后，在 `PLAN.md` 第 9 节勾选对应的完成项（`- [ ]` → `- [x]`），与代码在同一个 PR 中提交。
 - 提交前确保验收命令全部通过：`pnpm lint && pnpm typecheck && pnpm test && pnpm build`。
+- **不得丢失未提交或未推送的内容**：未经用户确认，不得执行 `git clean`、`git reset --hard`、`git checkout -- .`、强制推送（`push --force` / `--force-with-lease`）等会丢弃工作区、未提交或未推送内容的命令。需要在干净环境中验证时，先提交，或者在单独的目录里 clone 后再验证。
+- 本文件与 `AGENTS.md`（由 turbo 自动维护）冲突时，以本文件为准。
 
 ## 硬性约束
 
@@ -26,7 +28,17 @@ SubLoom：可视化代理配置生成与托管工具。**`PLAN.md` 是唯一的�
 | Biome `noRestrictedImports` | `packages/*`、`apps/node`、`apps/web` | 导入 `cloudflare:*` |
 | Biome `noGlobalEval`、`noImpliedEval`、`noRestrictedGlobals(Function)` | 全仓库 | `eval`、`new Function`、字符串形式的 `setTimeout` |
 
-`packages/db` 同时被 Node（better-sqlite3）和 Workers（D1）使用，因此也按 core/server 的标准保持运行时无关。
+`packages/db` 同时被 Node（better-sqlite3）和 Workers（D1）使用，因此也按 core/server 的标准禁止 Node API。上述限制同样适用于 `packages/*/test` 中的测试代码。
+
+## Golden 测试约定
+
+core 的导入器和导出器用 golden 测试覆盖，测试代码同样不得使用 `fs` 等 Node API：
+
+- 目录：`packages/core/test/fixtures/<case>/`，输入为 `input.*`，期望输出为 `expected.<target>.*`（如 `expected.mihomo.yaml`）。
+- **读取输入**：用 Vite 的 `import.meta.glob`，以 `?raw` 方式读取，例如 `import.meta.glob('./fixtures/*/input.*', { query: '?raw', import: 'default', eager: true })`（需在 core 的 tsconfig `types` 中加入 `vite/client`）。
+- **期望输出**：用 Vitest 的 `expect(text).toMatchFileSnapshot('./fixtures/<case>/expected.<target>.<ext>')` 写成独立文件，不使用内联快照或 `.snap` 文件。
+- **更新快照**必须是有意为之：用 `pnpm --filter @subloom/core exec vitest run -u`，并在提交前逐个检查快照文件的 diff。
+- **mihomo 实际校验**：CI 直接对所有 `expected.mihomo.*` 快照文件执行 `mihomo -t`。
 
 ## 仓库结构
 
@@ -65,5 +77,5 @@ pnpm --filter @subloom/worker dev         # wrangler dev
 - `packages/*` 用 `tsc -p tsconfig.build.json` 输出到 `dist/`（ESM + `.d.ts`），`exports` 指向 `dist`。turbo 的 `typecheck`、`test`、`build` 都依赖上游包先 build。
 - 共用的依赖版本统一写在 `pnpm-workspace.yaml` 的 `catalog` 中，包内用 `"catalog:"` 引用。
 - Vitest 固定在 4.x：M5 需要的 `@cloudflare/vitest-pool-workers` 目前只支持 `vitest ^4.1`，升级前先确认兼容性。
-- 测试文件放在各包的 `test/` 目录，命名 `*.test.ts`；golden 测试数据放在 `packages/core/test/fixtures/<case>/`。
+- 测试文件放在各包的 `test/` 目录，命名 `*.test.ts`。
 - 工具链版本可能比你的训练数据新。修改 Turborepo 配置前先读已安装包内的文档（`node_modules/turbo/docs/`，见 `AGENTS.md`，该文件由 turbo 自动维护）；其他工具同理，以已安装版本的文档和 schema 为准。

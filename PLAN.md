@@ -418,6 +418,7 @@ GET /sub/:token
 - [ ] 流水线操作（第 4 节全部）
 - [ ] 预设模板 2 套（极简、常用分流）
 - [ ] golden 测试，CI 中执行 `mihomo -t`
+- [ ] 有测试后去掉各包 `test` 脚本中的 `--passWithNoTests`
 - **验收**：样例订阅导入后经流水线处理，导出的配置能通过 `mihomo -t`
 
 ### M2 core：Surge 与兼容性警告
