@@ -6,11 +6,21 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "@hono/node-server": "catalog:",
+    "@subloom/db": "workspace:*",
+    "@subloom/server": "workspace:*",
+    "better-sqlite3": "catalog:",
+    "drizzle-orm": "catalog:"
   }
 }

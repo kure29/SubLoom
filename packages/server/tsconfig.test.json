@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // 测试中用 import.meta.glob / ?raw 读取 core 的 fixtures
+    "types": ["vite/client"],
+    // test/api/suite.ts 以包名引用自身的类型
+    "paths": { "@subloom/server": ["./src/index.ts"] }
+  },
+  "include": ["src", "test"]
+}

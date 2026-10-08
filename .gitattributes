@@ -1,2 +1,4 @@
 # golden 测试数据必须逐字节保留（如 CRLF 换行），禁止 git 做换行转换
 packages/core/test/fixtures/** -text
+# 迁移 SQL 被内嵌进 src/migrations.gen.ts，测试逐字节比较，同样禁止换行转换
+packages/db/migrations/** -text

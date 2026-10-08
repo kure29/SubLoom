@@ -92,6 +92,6 @@
     }
   ],
   "files": {
-    "includes": ["**", "!packages/core/test/fixtures"]
+    "includes": ["**", "!packages/core/test/fixtures", "!packages/db/migrations"]
   }
 }

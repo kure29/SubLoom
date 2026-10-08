@@ -43,6 +43,13 @@ core 的导入器和导出器用 golden 测试覆盖，测试代码同样不得�
 - **Surge 没有命令行校验工具**：`expected.surge.*` 变化时逐个对照 Surge 官方手册人工核对。
 - **mihomo 实际校验**：CI 直接对所有 `expected.mihomo.*` 快照文件执行 `mihomo -t`（`scripts/mihomo-check.sh <mihomo 可执行文件>`，本地也可运行）。
 
+## 数据库与 server 测试约定
+
+- **迁移**：修改 `packages/db/src/schema.ts` 后运行 `pnpm --filter @subloom/db db:generate`（drizzle-kit 生成 `migrations/*.sql`，再内嵌为 `src/migrations.gen.ts`），两者一起提交。已发布的迁移只增不改。`migrations/` 由 drizzle-kit 生成，Biome 不检查；CI 会重新生成并检查没有未提交的变化。
+- **需要数据库的 API 集成测试**写在 `packages/server/test/api/suite.ts`（`describeApi`，不以 `.test.ts` 结尾），由 `apps/node/test/api.test.ts`（M5 起还有 `apps/worker`）传入各自的存储运行；packages/server 自己只运行不需要数据库的单元测试。suite 只能以包名 `@subloom/server` 引用 server 的类型（`import type`），不要用相对路径引用 `src`。
+- **测试中不访问真实网络**：packages/server、apps/node 的 Vitest setup 把全局 `fetch` 换成直接抛错的函数（`unstubGlobals: true`，每个测试后恢复），测试中用 `vi.stubGlobal('fetch', …)` mock；DNS 解析用假的 `resolveHost`。
+- **日志脱敏**：日志和错误信息中不得出现订阅 URL（可能带 token）、节点地址和密码。
+
 ## 仓库结构
 
 ```
@@ -70,6 +77,8 @@ pnpm --filter @subloom/core test          # 只跑某个包的任务
 pnpm --filter @subloom/core exec vitest   # watch 模式
 pnpm --filter @subloom/web dev            # 前端开发服务器
 pnpm --filter @subloom/worker dev         # wrangler dev
+pnpm --filter @subloom/db db:generate     # 修改 schema 后生成迁移
+pnpm build && pnpm --filter @subloom/node start  # 本地运行 Node 版（数据在 apps/node/data）
 ```
 
 ## 代码与依赖约定

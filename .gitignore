@@ -9,3 +9,5 @@ coverage/
 !.env.example
 .dev.vars
 .mihomo/
+# apps/node 本地运行时的默认数据目录（DATA_DIR）
+apps/node/data/
