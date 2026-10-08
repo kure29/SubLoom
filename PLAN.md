@@ -347,11 +347,11 @@ type PipelineOp =
 
 ```ts
 interface Platform {
-  db: DrizzleSqliteDb             // better-sqlite3 或 D1
-  blobs: BlobStore                // Node: 文件系统或 SQLite 表；Workers: KV
+  db: SubloomDb                   // @subloom/db 导出的类型：better-sqlite3 或 D1 的 Drizzle 实例
+  blobs: BlobStore                // Node: 文件系统；Workers: KV
   env: { adminToken?: string; secretKey?: string; corsOrigins: string[]; allowPrivateFetch: boolean }
   waitUntil(p: Promise<unknown>): void // Node 下直接执行不等待；Workers 用 ctx.waitUntil
-  isPrivateAddress?(host: string): Promise<boolean> // 仅 Node 实现 DNS 解析检查
+  resolveHost?(host: string): Promise<string[]> // 仅 Node 实现：DNS 解析出的全部地址，私有地址判断在 server 中统一完成
 }
 
 interface BlobStore {
@@ -361,7 +361,8 @@ interface BlobStore {
 }
 ```
 
-定时任务：server 导出 `runScheduledRefresh(platform)`。Node 用 `setInterval` 调用，Workers 在 `scheduled` 事件中调用。
+- **初始化**：server 导出 `bootstrap(platform)`（幂等，同一个 platform 只执行一次）：执行数据库迁移 → 准备管理令牌 → 准备加密密钥（见 5.5）。`createApp` 的中间件在每个请求前等待它完成，因此 Workers 在首次请求时自动初始化；Node 入口在启动时先调用一次，让自动生成的令牌在启动日志中打印出来。
+- 定时任务：server 导出 `runScheduledRefresh(platform)`，逐个刷新到期的远程订阅（`last_fetched_at + ttl_sec` 已过，从未拉取过的也算），串行执行。Node 用 `setInterval` 调用（间隔 `REFRESH_INTERVAL_MIN`，上一轮未结束时跳过），Workers 在 `scheduled` 事件中调用。
 
 ### 5.2 数据表（`packages/db`）
 
@@ -378,8 +379,12 @@ outputs      id, profile_id, target('mihomo'|'surge'|'shadowrocket'|'loon'|'auto
 fetch_logs   id, source_id, at, status, bytes, duration_ms, error
 ```
 
-- 订阅原始内容、解析后的节点、生成好的配置**不存数据库**，存 BlobStore（D1 有单行大小限制）。
-- Key 约定：`src:<id>:raw`、`src:<id>:nodes`、`out:<id>:<hash>`。
+- 订阅原始内容、解析后的节点、生成好的配置**不存数据库**，存 BlobStore（D1 有单行大小限制）。本地订阅（`kind: 'local'`）由用户粘贴，内容存在 `content` 列。
+- Key 约定：`src:<id>:raw`（远程订阅最近一次成功拉取的原始内容）、`src:<id>:nodes`、`out:<id>:<hash>`。
+- **`src:<id>:nodes`**：刷新订阅时就把解析结果以 JSON 存入（`{ fetchedAt, format, proxies, warnings }`，即 `importSubscription` 的结果去掉 `config`，加上本次成功拉取的时间）。解析比导出更耗时（500 节点约 10ms，见 5.6），生成配置时直接读取它，不再重复解析原始内容。
+- 时间字段（`*_at`）均为毫秒时间戳（整数）。`last_status`、`fetch_logs.status` 为 `'ok' | 'error'`，HTTP 状态码等细节写在 `error` 中。`last_fetched_at` 是最近一次尝试拉取的时间（无论成败），最近一次成功的时间见 nodes 中的 `fetchedAt`。
+- `fetch_logs.source_id` 引用 `sources`、`outputs.profile_id` 引用 `profiles`，均为 `ON DELETE CASCADE`（Node 下需开启 `PRAGMA foreign_keys`，D1 默认开启）。每个订阅只保留最近 20 条拉取日志。
+- **迁移**：schema 用 Drizzle 定义（`src/schema.ts`），`drizzle-kit generate` 生成 SQL 到 `packages/db/migrations/`，再由 `scripts/embed-migrations.mjs` 内嵌为 `src/migrations.gen.ts`（`pnpm --filter @subloom/db db:generate` 一并完成）。`migrate(db)` 与运行时无关，用 `__subloom_migrations` 表记录已执行的迁移，每个迁移在一个事务中执行；Node 启动时、Workers 首次请求时（`bootstrap`）调用。测试用 `import.meta.glob` 校验内嵌内容与 SQL 文件一致，CI 中重新生成并检查没有未提交的变化。迁移只增不改，已发布的迁移文件不得修改。
 
 ### 5.3 API
 
@@ -392,8 +397,9 @@ POST   /api/sources                  新建
 GET    /api/sources/:id
 PATCH  /api/sources/:id
 DELETE /api/sources/:id
-POST   /api/sources/:id/refresh      立即拉取
-GET    /api/sources/:id/nodes        预览解析出的节点
+POST   /api/sources/:id/refresh      立即拉取（同步执行，返回结果）
+GET    /api/sources/:id/nodes        预览解析出的节点（读取 src:<id>:nodes）
+GET    /api/sources/:id/logs         最近的拉取日志（新的在前）
 
 GET    /api/profiles
 POST   /api/profiles
@@ -411,6 +417,10 @@ GET    /api/backup                   导出全部数据（订阅 URL 明文，�
 POST   /api/restore
 GET    /healthz
 ```
+
+- 错误响应统一为 `{ error: { code, message } }`：未认证 401（`UNAUTHORIZED`）、请求不合法 400（`INVALID_REQUEST`）、不存在 404（`NOT_FOUND`、还没有节点缓存时 `NO_CACHE`）。
+- 订阅源：`POST` 的请求体为 `{ name, kind: 'remote', url, userAgent?, ttlSec? }` 或 `{ name, kind: 'local', content }`；`kind` 创建后不可修改。返回的订阅源包含明文 `url`（管理接口已认证）和解析后的 `userinfo`，列表不返回本地订阅的 `content`。新建远程订阅不会自动拉取，由前端随后调用 refresh；本地订阅在新建和修改 `content` 时立即解析并写入 nodes。
+- `refresh` 成功返回 200 `{ source, nodeCount, warnings }`；失败返回 502 `{ error, source }`，`error.code` 为 `SSRF_BLOCKED`、`FETCH_FAILED`、`PARSE_FAILED` 或 `DECRYPT_FAILED`。
 
 公开接口（无需认证，靠 token）：
 
@@ -432,18 +442,20 @@ GET /sub/:token
 
 ### 5.4 订阅拉取
 
-- 每个订阅可自定义 User-Agent（默认用 mihomo 风格的 UA，让机场返回 YAML）。
-- 自动识别返回内容：mihomo YAML、Base64 编码的 URI 列表、纯文本 URI 列表。
-- 解析上游响应头里的 `subscription-userinfo` 并保存。
-- 拉取失败时**保留上一次成功的缓存**，记录错误，界面上展示。
-- 超时 15 秒，响应体上限 10 MB。
+- 每个订阅可自定义 User-Agent。默认 `clash.meta`：常见机场面板按 UA 中的 `clash`、`meta` 关键字返回 mihomo YAML。
+- 自动识别返回内容（`importSubscription`）：mihomo YAML、Base64 编码的 URI 列表、纯文本 URI 列表。
+- 解析上游响应头里的 `subscription-userinfo`（`upload`、`download`、`total`、`expire`，均为非负整数，缺失的字段省略）并保存；成功拉取但响应中没有该头时清空。
+- 拉取失败时**保留上一次成功的缓存**（`src:<id>:raw`、`src:<id>:nodes`、`userinfo_json` 都不动），记录错误（`last_status`、`last_error`、`fetch_logs`），界面上展示。以下都算失败：SSRF 检查不通过、网络错误、超时、非 2xx、响应体超限、无法识别格式或解析出 0 个节点（防止机场返回错误页时清空缓存）。
+- 超时 15 秒（含读取响应体），响应体上限 10 MB（先看 `Content-Length`，再在读取时计数，超出即中断）。
+- 重定向手动处理（`redirect: 'manual'`），每一跳都重新做 SSRF 检查，最多 5 次。
+- 刷新间隔 `ttl_sec` 默认 6 小时，最小 5 分钟。
 
 ### 5.5 安全
 
-- **管理令牌**：优先读环境变量 `ADMIN_TOKEN`；未设置时首次启动自动生成，哈希后存入 settings，明文只打印一次到日志（Docker 日志 / Workers 控制台日志）。比较时用常量时间比较。
-- **加密**：订阅 URL 使用 AES-GCM 加密存储，密钥由 `SECRET_KEY` 经 HKDF 派生。未设置 `SECRET_KEY` 时同样自动生成并持久化，同时在日志和文档里提醒用户备份（丢失则无法解密）。
+- **管理令牌**：优先读环境变量 `ADMIN_TOKEN`；未设置时首次启动自动生成（32 字节随机数，base64url），SHA-256 哈希后存入 settings（`admin_token_hash`），明文只打印一次到日志（Docker 日志 / Workers 控制台日志；并发初始化时只有写入成功的一方打印）。校验时对请求中的令牌取 SHA-256，与期望的哈希做常量时间比较。
+- **加密**：订阅 URL 使用 AES-256-GCM 加密存储，密钥由 `SECRET_KEY` 经 HKDF-SHA256 派生。密文格式 `v1.<iv>.<密文+tag>`（base64url），以 `source:<id>` 作为附加认证数据，密文不能挪到其他订阅上使用。未设置 `SECRET_KEY` 时自动生成并存入 settings（`secret_key`），日志中提醒：密钥与密文在同一个数据库中，数据库泄露即可解密，要真正保护 URL 请设置 `SECRET_KEY` 环境变量（丢失则无法解密）。settings 中另存一段用当前密钥加密的校验值（`secret_key_check`），启动时解不开则在日志中报错（`SECRET_KEY` 被更换），对应订阅刷新时报 `DECRYPT_FAILED`。
 - **输出 token**：32 字节随机数，base64url 编码。
-- **SSRF**：默认拒绝拉取私有和保留地址（127/8、10/8、172.16/12、192.168/16、169.254/16、::1、fc00::/7 等），Node 下解析 DNS 后再检查一次。设置 `ALLOW_PRIVATE_FETCH=true` 可关闭（用于拉取局域网内的订阅）。
+- **SSRF**：只允许 `http`、`https`。默认拒绝拉取私有和保留地址：IPv4 的 0/8、10/8、100.64/10、127/8、169.254/16、172.16/12、192.0.0/24、192.0.2/24、192.168/16、198.18/15、198.51.100/24、203.0.113/24、224/4、240/4；IPv6 的 ::/96（含 `::`、`::1`）、100::/64、2001:db8::/32、fc00::/7、fe80::/10、fec0::/10、ff00::/8，以及内嵌 IPv4 的 `::ffff:0:0/96`、`64:ff9b::/96`、`2002::/16` 按内嵌的 IPv4 判断；`localhost`、`*.localhost` 视为私有。Node 下用 `resolveHost` 解析 DNS，任一地址为私有即拒绝（解析失败同样拒绝）；Workers 无法解析 DNS，平台本身不允许访问内网地址。设置 `ALLOW_PRIVATE_FETCH=true` 可关闭全部检查（用于拉取局域网内的订阅）。
 - **日志脱敏**：日志中不出现完整订阅 URL、节点地址和密码。
 - **CORS**：管理接口只允许 `CORS_ORIGINS` 中列出的来源（默认包含实例自身和官方前端域名）。
 
@@ -467,7 +479,8 @@ GET /sub/:token
 - 多架构：`linux/amd64`、`linux/arm64`（覆盖 NAS 和树莓派）。
 - 发布到 GHCR，镜像名 `ghcr.io/<owner>/subloom`（可选同时发布到 Docker Hub）。
 - 数据目录 `/data`（SQLite 数据库 + 缓存文件），通过 volume 挂载。
-- 环境变量：`ADMIN_TOKEN`、`SECRET_KEY`、`PORT`（默认 3000）、`CORS_ORIGINS`、`ALLOW_PRIVATE_FETCH`、`REFRESH_INTERVAL_MIN`。全部可选。
+- 环境变量：`ADMIN_TOKEN`、`SECRET_KEY`、`PORT`（默认 3000）、`DATA_DIR`（默认 `./data`，镜像中为 `/data`）、`CORS_ORIGINS`（逗号分隔）、`ALLOW_PRIVATE_FETCH`、`REFRESH_INTERVAL_MIN`（定时刷新的检查间隔，默认 10，0 为关闭）。全部可选。
+- 数据目录结构：`subloom.db`（SQLite）、`blobs/`（文件 BlobStore，一个 key 一个文件，文件名为 key 的百分号编码，先写临时文件再改名）。
 - 启动时自动执行数据库迁移。
 - 提供 `HEALTHCHECK` 和 `docker-compose.yml` 示例。
 
@@ -507,7 +520,8 @@ GET /sub/:token
 - **core**：每个导入器和导出器都有 golden 测试（`test/fixtures/<case>/input.*` 与 `expected.<target>.*`）。更新快照必须是有意为之。
 - **Surge 校验**：Surge 没有命令行校验工具，`expected.surge.*` 快照逐个对照官方手册人工核对；新增功能时在 PR 中附完整的 Surge 示例输出，在手机上导入测试。
 - **mihomo 实际校验**：CI 按固定版本（tag + commit SHA）从源码构建 mihomo（go.sum 校验依赖），对所有 `expected.mihomo.*` golden 输出执行 `mihomo -t`。GEOIP/GEOSITE 数据文件由 mihomo 首次运行时自动下载，所有文件共用一个数据目录并在 CI 中缓存。
-- **server**：同一套 API 集成测试分别在 Node（better-sqlite3）和 Workers（vitest-pool-workers + D1/KV 模拟）下运行。
+- **server**：同一套 API 集成测试分别在 Node（better-sqlite3）和 Workers（vitest-pool-workers + D1/KV 模拟）下运行。packages/* 的测试不能使用 Node API（拿不到 better-sqlite3），因此集成测试写在 `packages/server/test/api/suite.ts`（`describeApi(createPlatform)`，不以 `.test.ts` 结尾，server 自己不运行），由 `apps/node/test`（M5 起还有 `apps/worker/test`）传入各自的 Platform 运行；packages/server 自己只运行不需要数据库的单元测试（加密、SSRF、拉取、userinfo 解析）。
+- **测试中不访问真实网络**：各包的 Vitest setup 文件把全局 `fetch` 替换为直接抛错的函数，测试中按需 mock；DNS 解析用假的 `resolveHost`。上游响应头使用 `packages/core/test/fixtures/import/subscription-headers.json`。
 - **性能基准**：500 节点订阅 → 解析 → 流水线 → 导出，记录耗时，在 CI 中监控回退。`packages/core/test/perf/` 中确定性生成 500 个节点（常见协议轮流出现）；`chain.bench.ts`（`pnpm --filter @subloom/core bench`）分别测量解析、流水线、各导出器和完整链路，CI 把结果写入 job summary；`chain.test.ts` 给完整链路设宽松上限（100ms，取 5 次中最快的一次；开发机上约 15–20ms），只拦截数量级的回退，避免 runner 性能波动导致误报。
 - **CI 流程**：lint → typecheck → test → build；main 分支打 tag 时发布 Docker 镜像。
 
@@ -542,11 +556,11 @@ GET /sub/:token
 - **验收**：同一份 profile 导出 mihomo 和 Surge 均正确；含不支持功能时警告完整准确
 
 ### M3 server：存储与订阅源
-- [ ] `packages/db` schema 与迁移
-- [ ] Platform 与 BlobStore 接口，`createApp(platform)`
-- [ ] 管理令牌（自动生成逻辑）、加密模块、SSRF 检查
-- [ ] sources 增删改查、拉取（UA、格式识别、userinfo、失败保留缓存）、拉取日志
-- [ ] `apps/node` 入口：better-sqlite3、文件 BlobStore、定时刷新
+- [x] `packages/db` schema 与迁移
+- [x] Platform 与 BlobStore 接口，`createApp(platform)`
+- [x] 管理令牌（自动生成逻辑）、加密模块、SSRF 检查
+- [x] sources 增删改查、拉取（UA、格式识别、userinfo、失败保留缓存）、拉取日志
+- [x] `apps/node` 入口：better-sqlite3、文件 BlobStore、定时刷新
 - **验收**：Node 下可通过 API 添加订阅并刷新，节点预览正确，数据库中 URL 为密文
 
 ### M4 server：配置与输出链接

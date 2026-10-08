@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // packages/server/test/api/suite.ts 用 ?raw 读取 core 的 fixtures
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src", "test"]
+}

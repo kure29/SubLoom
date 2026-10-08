@@ -1,2 +1,5 @@
-// Drizzle schema 与迁移。M3 起实现。
-export {}
+export type { SubloomDb } from './db.js'
+export { type Migration, migrate, splitStatements } from './migrate.js'
+export { migrations } from './migrations.gen.js'
+export * as schema from './schema.js'
+export * from './schema.js'

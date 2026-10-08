@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // 测试中用 import.meta.glob 读取迁移文件
+    "types": ["vite/client"]
+  },
+  "include": ["src", "test"]
+}
