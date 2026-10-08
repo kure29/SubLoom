@@ -1,0 +1,115 @@
+{
+  "format": "uri-list",
+  "proxies": [
+    {
+      "name": "Legacy SS",
+      "type": "ss",
+      "server": "legacy.example.com",
+      "port": 8388,
+      "cipher": "aes-128-gcm",
+      "password": "legacy-pass"
+    },
+    {
+      "name": "noname.example.com:8388",
+      "type": "ss",
+      "server": "noname.example.com",
+      "port": 8388,
+      "cipher": "aes-256-gcm",
+      "password": "noname"
+    },
+    {
+      "name": "VMess 数字端口 无TLS",
+      "type": "vmess",
+      "server": "198.51.100.20",
+      "port": 10086,
+      "uuid": "00000000-0000-4000-8000-000000000006",
+      "alterId": 0,
+      "cipher": "auto"
+    },
+    {
+      "name": "VLESS 无加密",
+      "type": "vless",
+      "server": "plain.example.com",
+      "port": 80,
+      "uuid": "00000000-0000-4000-8000-000000000007"
+    },
+    {
+      "name": "hy2 别名协议",
+      "type": "hysteria2",
+      "server": "hy2.example.com",
+      "port": 443,
+      "password": "fake-pass-hy2",
+      "tls": {
+        "sni": "hy2.example.com",
+        "skipCertVerify": true
+      }
+    },
+    {
+      "name": "Port Hopping",
+      "type": "hysteria2",
+      "server": "hop.example.com",
+      "port": 20000,
+      "password": "fake-pass-hop",
+      "ports": "20000-30000",
+      "tls": {
+        "sni": "hop.example.com"
+      }
+    },
+    {
+      "name": "Duplicate Name",
+      "type": "trojan",
+      "server": "dup.example.com",
+      "port": 443,
+      "password": "fake-pass-dup",
+      "tls": {
+        "sni": "dup.example.com"
+      }
+    },
+    {
+      "name": "Duplicate Name",
+      "type": "trojan",
+      "server": "dup2.example.com",
+      "port": 443,
+      "password": "fake-pass-dup2",
+      "tls": {
+        "sni": "dup2.example.com"
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "level": "warn",
+      "code": "INVALID_PROXY",
+      "protocol": "vmess",
+      "line": 5,
+      "message": "invalid vmess link: payload is not valid base64"
+    },
+    {
+      "level": "warn",
+      "code": "UNSUPPORTED_PROTOCOL",
+      "protocol": "tuic",
+      "line": 11,
+      "message": "protocol \"tuic\" is not supported"
+    },
+    {
+      "level": "warn",
+      "code": "UNSUPPORTED_PROTOCOL",
+      "protocol": "ssr",
+      "line": 12,
+      "message": "protocol \"ssr\" is not supported"
+    },
+    {
+      "level": "warn",
+      "code": "UNSUPPORTED_PROTOCOL",
+      "protocol": "https",
+      "line": 13,
+      "message": "protocol \"https\" is not supported"
+    },
+    {
+      "level": "warn",
+      "code": "INVALID_URI",
+      "line": 14,
+      "message": "not a proxy link"
+    }
+  ]
+}

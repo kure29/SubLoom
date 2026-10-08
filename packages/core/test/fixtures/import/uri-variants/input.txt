@@ -1,0 +1,17 @@
+vless://00000000-0000-4000-8000-000000000011@203.0.113.21:443?encryption=none&security=reality&sni=www.example.com&fp=safari&pbk=Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm8&sid=0123&spx=%2F&type=grpc&serviceName=grpc-svc&mode=gun#VLESS%20Reality%20gRPC
+vless://00000000-0000-4000-8000-000000000012@h2.example.com:443?security=tls&sni=h2.example.com&alpn=h2&type=http&host=h2.example.com&path=%2Fh2#VLESS%20H2
+vless://00000000-0000-4000-8000-000000000013@up.example.com:443?security=tls&type=httpupgrade&host=up.example.com&path=%2Fupgrade#VLESS%20HTTPUpgrade
+vless://00000000-0000-4000-8000-000000000014@198.51.100.30:80?type=tcp&headerType=http&host=a.example.com,b.example.com&path=%2F&packetEncoding=xudp#VLESS%20TCP%20HTTP%20%E4%BC%AA%E8%A3%85
+vmess://eyJ2IjogIjIiLCAicHMiOiAiVk1lc3MgSDIiLCAiYWRkIjogInZoMi5leGFtcGxlLmNvbSIsICJwb3J0IjogIjQ0MyIsICJpZCI6ICIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMTUiLCAiYWlkIjogIjAiLCAic2N5IjogImFlcy0xMjgtZ2NtIiwgIm5ldCI6ICJoMiIsICJ0eXBlIjogIm5vbmUiLCAiaG9zdCI6ICJ2aDIuZXhhbXBsZS5jb20iLCAicGF0aCI6ICIvdmgyIiwgInRscyI6ICJ0bHMiLCAic25pIjogInZoMi5leGFtcGxlLmNvbSIsICJhbHBuIjogImgyLGh0dHAvMS4xIn0=
+vmess://eyJ2IjogIjIiLCAicHMiOiAiVk1lc3MgVENQIEhUVFAiLCAiYWRkIjogIjE5OC41MS4xMDAuMzEiLCAicG9ydCI6IDgwLCAiaWQiOiAiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDE2IiwgImFpZCI6IDAsICJuZXQiOiAidGNwIiwgInR5cGUiOiAiaHR0cCIsICJob3N0IjogImMuZXhhbXBsZS5jb20iLCAicGF0aCI6ICIvYSwvYiIsICJ0bHMiOiAiIn0=
+vmess://eyJ2IjogIjIiLCAicHMiOiAiVk1lc3MgSFRUUFVwZ3JhZGUiLCAiYWRkIjogInZ1cC5leGFtcGxlLmNvbSIsICJwb3J0IjogIjgwODAiLCAiaWQiOiAiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDE3IiwgImFpZCI6ICIwIiwgIm5ldCI6ICJodHRwdXBncmFkZSIsICJob3N0IjogInZ1cC5leGFtcGxlLmNvbSIsICJwYXRoIjogIi92dXAiLCAidGxzIjogIiIsICJ0ZXN0IjogImtlZXAtbWUifQ==
+trojan://p%40ss%3Aw0rd@tg.example.com:443?type=grpc&serviceName=tg-svc&peer=peer.example.com&allowInsecure=1#Trojan%20gRPC
+ss://YWVzLTI1Ni1nY206ZmFrZS1wYXNzLXYy@v2.example.com:443/?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dv2.example.com%3Bpath%3D/v2%3Btls#SS%20v2ray-plugin
+ss://YWVzLTI1Ni1nY206ZmFrZS1wYXNzLWtjcA@kcp.example.com:443/?plugin=kcptun%3Bmode%3Dfast2#SS%20unknown%20plugin
+hysteria2://fake%2Bpass@[2001:db8::20]:443,8443,20000-30000/?sni=hy.example.com&alpn=h3&pinSHA256=AA%3ABB%3ACC&upmbps=50&downmbps=200&obfs=salamander&obfs-password=fake-obfs#Hysteria2%20%E7%AB%AF%E5%8F%A3%E5%88%97%E8%A1%A8
+hysteria2://fake-pass@mport.example.com:443?mport=40000-50000#Hysteria2%20mport
+vless://00000000-0000-4000-8000-000000000018@bad.example.com:443?security=reality&sni=www.example.com#Invalid%3A%20reality%20without%20pbk
+vless://00000000-0000-4000-8000-000000000019@x.example.com:443?security=tls&type=xhttp#Unsupported%3A%20xhttp
+trojan://@empty.example.com:443#Invalid%3A%20empty%20password
+hysteria2://p@rev.example.com:30000-20000#Invalid%3A%20reversed%20range
+vmess://eyJ2IjogIjIiLCAicHMiOiAiSW52YWxpZDogbWlzc2luZyBhZGQiLCAicG9ydCI6ICI0NDMiLCAiaWQiOiAiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDIwIn0=

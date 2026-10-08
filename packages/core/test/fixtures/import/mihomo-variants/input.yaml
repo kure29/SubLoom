@@ -1,0 +1,62 @@
+# SubLoom fixture: every IR protocol, transports, extras and edge cases (FAKE data, hand-written)
+mixed-port: 7890
+allow-lan: true
+mode: Rule
+log-level: warning
+unified-delay: true
+tun: { enable: true, stack: mixed }
+proxy-providers:
+  provider1: { type: http, url: "https://sub.example.com/provider.yaml", interval: 3600 }
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  nameserver: [https://dns.example.com/dns-query]
+  fake-ip-filter: ["*.lan"]
+
+common: &common { udp: true, ip-version: ipv4 }
+
+proxies:
+  - { <<: *common, name: SS anchors, type: ss, server: ss.example.com, port: 8388, cipher: aes-128-gcm, password: 12e4 }
+  - { name: SS v2ray-plugin, type: ss, server: v2.example.com, port: 443, cipher: aes-128-gcm, password: fake-v2, plugin: v2ray-plugin, plugin-opts: { mode: websocket, host: v2.example.com, path: /v2, tls: true, mux: true, v2ray-http-upgrade: true } }
+  - { name: SS shadow-tls, type: ss, server: st.example.com, port: 443, cipher: 2022-blake3-aes-128-gcm, password: "AAAAAAAAAAAAAAAAAAAAAA==", plugin: shadow-tls, plugin-opts: { host: www.example.com, password: fake-st, version: 3 } }
+  - { name: SSR, type: ssr, server: ssr.example.com, port: 443, cipher: chacha20-ietf, password: fake-ssr, obfs: http_simple, obfs-param: o.example.com, protocol: auth_aes128_sha1, protocol-param: "100:fake" }
+  - { name: VMess H2, type: vmess, server: vh2.example.com, port: 443, uuid: 00000000-0000-4000-8000-000000000021, alterId: 0, cipher: auto, tls: true, servername: vh2.example.com, alpn: [h2], network: h2, h2-opts: { host: [vh2.example.com], path: /h2 } }
+  - { name: VMess HTTP, type: vmess, server: 198.51.100.40, port: 80, uuid: 00000000-0000-4000-8000-000000000022, network: http, http-opts: { method: GET, path: [/], headers: { Host: [a.example.com], Connection: [keep-alive] } }, global-padding: true }
+  - { name: VLESS HTTPUpgrade, type: vless, server: up.example.com, port: 443, uuid: 00000000-0000-4000-8000-000000000023, tls: true, servername: up.example.com, network: ws, ws-opts: { path: /up, headers: { Host: up.example.com }, v2ray-http-upgrade: true, v2ray-http-upgrade-fast-open: true } }
+  - { name: VLESS Reality gRPC, type: vless, server: 203.0.113.40, port: 443, uuid: 00000000-0000-4000-8000-000000000024, tls: true, servername: www.example.com, client-fingerprint: chrome, network: grpc, grpc-opts: { grpc-service-name: grpc-svc }, reality-opts: { public-key: Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm8, short-id: 01234567 }, smux: { enabled: true, protocol: h2mux } }
+  - { name: VLESS WS early data, type: vless, server: ed.example.com, port: 443, uuid: 00000000-0000-4000-8000-000000000025, tls: true, network: ws, ws-opts: { path: /ed, max-early-data: 2048, early-data-header-name: Sec-WebSocket-Protocol } }
+  - { name: Trojan ECH, type: trojan, server: ech.example.com, port: 443, password: fake-ech, sni: ech.example.com, skip-cert-verify: true, fingerprint: AA:BB, ech-opts: { enable: true, config: ZmFrZS1lY2g= } }
+  - { name: Hysteria2 ports, type: hysteria2, server: 2001:db8::30, port: 443, ports: "443,20000-30000", password: fake-hy2, up: 50, down: "200 Mbps", sni: hy.example.com, alpn: [h3], hop-interval: 30 }
+  - { name: TUIC, type: tuic, server: tuic.example.com, port: 443, uuid: 00000000-0000-4000-8000-000000000026, password: fake-tuic, sni: tuic.example.com, alpn: [h3], congestion-controller: bbr, udp-relay-mode: quic, reduce-rtt: true }
+  - { name: WireGuard, type: wireguard, server: 198.51.100.41, port: 51820, ip: 10.0.0.2, private-key: ZmFrZS1wcml2YXRl, public-key: ZmFrZS1wdWJsaWM=, reserved: [1, 2, 3], mtu: 1280, udp: true, allowed-ips: ["0.0.0.0/0"] }
+  - { name: AnyTLS, type: anytls, server: anytls.example.com, port: 443, password: fake-anytls, sni: anytls.example.com, idle-session-check-interval: 30 }
+  - { name: HTTP TLS, type: http, server: http.example.com, port: 443, username: fake-user, password: fake-pass, tls: true, sni: http.example.com }
+  - { name: SOCKS5, type: socks5, server: 198.51.100.42, port: 1080, username: fake-user, password: fake-pass, udp: true }
+  - { name: Invalid no server, type: trojan, port: 443, password: fake }
+  - { name: Unsupported snell, type: snell, server: snell.example.com, port: 443, psk: fake }
+  - { name: Unsupported xhttp, type: vless, server: x.example.com, port: 443, uuid: 00000000-0000-4000-8000-000000000027, network: xhttp }
+
+proxy-groups:
+  - { name: 节点选择, type: select, proxies: [负载均衡, 链式, DIRECT, REJECT, SS anchors, Missing node] }
+  - { name: 负载均衡, type: load-balance, proxies: [TUIC, AnyTLS], url: "https://cp.example.com/generate_204", interval: 300, strategy: consistent-hashing, lazy: true }
+  - { name: 链式, type: relay, proxies: [SS anchors, TUIC] }
+  - { name: 隐藏组, type: fallback, include-all-proxies: true, filter: "(?i)hysteria", exclude-filter: "ports", hidden: true, icon: "https://icon.example.com/a.png", use: [provider1] }
+
+rule-providers:
+  ads: { type: http, behavior: domain, format: mrs, url: "https://rules.example.com/ads.mrs", interval: 86400, path: ./ruleset/ads.mrs }
+  apps: { type: http, behavior: classical, format: text, url: "https://rules.example.com/apps.list", proxy: DIRECT }
+  local: { type: file, behavior: domain, path: ./local.yaml }
+
+rules:
+  - RULE-SET,ads,REJECT
+  - RULE-SET,apps,节点选择
+  - OR,((NOT,((DOMAIN,a.example.com))),(AND,((DST-PORT,80),(SRC-IP-CIDR,10.0.0.0/8)))),DIRECT
+  - AND,((IP-CIDR,198.51.100.0/24,no-resolve),(DST-PORT,443)),负载均衡
+  - IP-ASN,64500,DIRECT,no-resolve
+  - PROCESS-NAME,curl,DIRECT
+  - DOMAIN-REGEX,^api\.example\.com$,节点选择
+  - PROCESS-PATH,/usr/bin/curl,DIRECT
+  - SUB-RULE,(NETWORK,tcp),sub1
+  - DOMAIN,missing-target.example.com
+  - IP-CIDR,203.0.113.0/24,DIRECT,src
+  - MATCH,节点选择

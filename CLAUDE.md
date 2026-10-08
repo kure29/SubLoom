@@ -34,8 +34,9 @@ SubLoom：可视化代理配置生成与托管工具。**`PLAN.md` 是唯一的�
 
 core 的导入器和导出器用 golden 测试覆盖，测试代码同样不得使用 `fs` 等 Node API：
 
-- 目录：`packages/core/test/fixtures/<case>/`，输入为 `input.*`，期望输出为 `expected.<target>.*`（如 `expected.mihomo.yaml`）。
-- **读取输入**：用 Vite 的 `import.meta.glob`，以 `?raw` 方式读取，例如 `import.meta.glob('./fixtures/*/input.*', { query: '?raw', import: 'default', eager: true })`（需在 core 的 tsconfig `types` 中加入 `vite/client`）。
+- 目录：`packages/core/test/fixtures/<import|export>/<case>/`，输入为 `input.*`，期望输出为 `expected.<target>.*`。导入器的 target 是 IR（`expected.ir.json`），导出器是客户端（如 `expected.mihomo.yaml`）。
+- fixtures 逐字节保留：`.gitattributes` 禁止换行转换，Biome 不检查也不格式化 `test/fixtures`。
+- **读取输入**：用 Vite 的 `import.meta.glob`，以 `?raw` 方式读取，例如 `import.meta.glob('./fixtures/import/*/input.*', { query: '?raw', import: 'default', eager: true })`（`vite/client` 类型只在 `packages/core/tsconfig.test.json` 中启用，`src` 不能使用 `import.meta.glob`）。
 - **期望输出**：用 Vitest 的 `expect(text).toMatchFileSnapshot('./fixtures/<case>/expected.<target>.<ext>')` 写成独立文件，不使用内联快照或 `.snap` 文件。
 - **更新快照**必须是有意为之：用 `pnpm --filter @subloom/core exec vitest run -u`，并在提交前逐个检查快照文件的 diff。
 - **mihomo 实际校验**：CI 直接对所有 `expected.mihomo.*` 快照文件执行 `mihomo -t`。

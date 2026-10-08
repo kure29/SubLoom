@@ -109,6 +109,9 @@ type ProxyType =
   | 'hysteria2' | 'tuic' | 'wireguard' | 'anytls'
   | 'http' | 'socks5'
 
+// 无法映射的字段按来源格式分命名空间原样保留，导出时尽力输出（见下方"IR 约定"）
+type Extra = Partial<Record<'mihomo' | 'uri' | 'surge', Record<string, unknown>>>
+
 interface ProxyBase {
   name: string
   type: ProxyType
@@ -116,11 +119,12 @@ interface ProxyBase {
   port: number
   udp?: boolean
   tfo?: boolean
-  tls?: TlsOptions          // sni、alpn、skipCertVerify、fingerprint、reality、ech 等
+  tls?: TlsOptions          // 存在即启用 TLS：sni、alpn、skipCertVerify、clientFingerprint、reality、ech 等
   transport?: Transport     // ws、grpc、h2、http、httpupgrade 等
-  extra?: Record<string, unknown> // 无法映射的字段原样保留，导出时尽力输出
+  extra?: Extra
 }
 // 各协议用 discriminated union 扩展自己的字段（cipher、uuid、password、flow 等）
+// hysteria2 支持端口跳跃：ports?: string（如 "20000-30000"），port 取范围内第一个端口
 
 // ---- 策略组 ----
 type BuiltinTarget = 'DIRECT' | 'REJECT' | 'REJECT-DROP'
@@ -140,6 +144,7 @@ interface ProxyGroup {
   tolerance?: number
   hidden?: boolean
   icon?: string
+  extra?: Extra
 }
 
 // ---- 规则 ----
@@ -149,12 +154,15 @@ type RuleType =
   | 'RULE-SET' | 'PROCESS-NAME' | 'DST-PORT' | 'SRC-IP-CIDR'
   | 'AND' | 'OR' | 'NOT' | 'MATCH'
 
-interface Rule {
+interface RuleCondition {
   type: RuleType
   value?: string            // MATCH 无 value；RULE-SET 的 value 为 ruleSet id
-  children?: Rule[]         // AND / OR / NOT
-  target: string            // 策略组名或 BuiltinTarget
+  children?: RuleCondition[] // AND / OR / NOT 的子条件（子条件没有 target）
   noResolve?: boolean
+}
+
+interface Rule extends RuleCondition {
+  target: string            // 策略组名或 BuiltinTarget
 }
 
 // ---- 规则集 ----
@@ -165,6 +173,7 @@ interface RuleSet {
   // 各客户端对应的远程地址与格式（社区规则仓库通常按客户端分目录提供）
   sources: Partial<Record<Target, { url: string; format: 'yaml' | 'text' | 'mrs' | 'list' }>>
   interval?: number
+  extra?: Extra
 }
 
 // ---- 顶层 ----
@@ -177,8 +186,24 @@ interface Profile {
   groups: ProxyGroup[]
   rules: Rule[]             // 有序
   ruleSets: RuleSet[]
+  extra?: Extra             // GeneralConfig、DnsConfig 也带 extra
 }
 ```
+
+### IR 约定
+
+- 字段名统一 camelCase，与来源格式无关。节点的 TS 类型名为 `ProxyNode`（避免遮蔽全局 `Proxy`），schema 为 `ProxySchema`。
+- **规范形式**：默认值为 false 的可选布尔字段（`udp`、`tfo`、`skipCertVerify`、`hidden`、`noResolve` 等），值为 false 时省略，由导入器负责规范化。来源无法表达的信息不编造：例如 URI 无法表示 UDP，URI 导入的节点不设置 `udp`。
+- **extra 按来源格式分命名空间**：如 `extra: { mihomo: { 'ip-version': 'ipv4' } }`、`extra: { uri: { pinSHA256: '...' } }`，键名和嵌套结构保持来源原样（mihomo 子对象中剩余的键放在同名子对象下，如 `{ 'ws-opts': { ... } }`）。导出器只合并与自己格式相同的那份，其余给出警告。
+- `tls`、`transport` 只出现在适用的协议上（如 ss 没有 `transport`），不放在公共字段里。`tls` 存在即启用 TLS；trojan、hysteria2、tuic、anytls 的 `tls` 始终存在（可为 `{}`）。uTLS 指纹为 `tls.clientFingerprint`，证书指纹为 `tls.certFingerprint`。
+
+### 导入器
+
+- `importSubscription(text)` 自动识别格式，依次尝试：mihomo YAML（顶层有 `proxies`、`proxy-groups`、`rules` 或 `rule-providers`）→ 明文链接列表（某行以 `scheme://` 开头）→ Base64（标准 / URL-safe、有无 padding、允许换行）编码的链接列表。都不是时返回 `UNKNOWN_FORMAT` 错误。
+- 返回 `{ format, proxies, config?, warnings }`，`config` 仅在 YAML 包含策略组、规则等内容时存在。
+- 保持源顺序，不去重（去重交给流水线）。
+- 非法或不支持的条目跳过并产生警告：URI 带行号和协议名，YAML 带路径（如 `rules[12]`）。警告中不包含原始链接内容（可能含密码）。
+- IR 无法表示的整条对象（如不在 RuleType 中的规则、非 http 的 rule-provider）跳过并警告。
 
 ### 导出器接口与能力矩阵
 
@@ -412,8 +437,8 @@ GET /sub/:token
 - **验收**：`pnpm lint && pnpm typecheck && pnpm test && pnpm build` 全部通过
 
 ### M1 core：IR 与 mihomo
-- [ ] IR zod schema（第 4 节）
-- [ ] 导入器：mihomo YAML；URI（ss、vmess、vless 含 reality、trojan、hysteria2）；Base64 订阅自动识别
+- [x] IR zod schema（第 4 节）
+- [x] 导入器：mihomo YAML；URI（ss、vmess、vless 含 reality、trojan、hysteria2）；Base64 订阅自动识别
 - [ ] mihomo 导出器（含 rule-providers、proxy-providers 风格的规则集输出）
 - [ ] 流水线操作（第 4 节全部）
 - [ ] 预设模板 2 套（极简、常用分流）
