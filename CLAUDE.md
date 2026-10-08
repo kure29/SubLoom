@@ -39,7 +39,8 @@ core 的导入器和导出器用 golden 测试覆盖，测试代码同样不得�
 - **读取输入**：用 Vite 的 `import.meta.glob`，以 `?raw` 方式读取，例如 `import.meta.glob('./fixtures/import/*/input.*', { query: '?raw', import: 'default', eager: true })`（`vite/client` 类型只在 `packages/core/tsconfig.test.json` 中启用，`src` 不能使用 `import.meta.glob`）。
 - **期望输出**：用 Vitest 的 `expect(text).toMatchFileSnapshot('./fixtures/<case>/expected.<target>.<ext>')` 写成独立文件，不使用内联快照或 `.snap` 文件。
 - **更新快照**必须是有意为之：用 `pnpm --filter @subloom/core exec vitest run -u`，并在提交前逐个检查快照文件的 diff。
-- 导出用例另有 `expected.warnings.json`（流水线与导出警告），输入格式见 `packages/core/test/fixtures/export/README.md`。
+- 导出用例对每个导出器各有一份快照（`expected.mihomo.yaml`、`expected.surge.conf`），另有 `expected.warnings.json`（`{ pipeline, mihomo, surge }`），输入格式见 `packages/core/test/fixtures/export/README.md`。
+- **Surge 没有命令行校验工具**：`expected.surge.*` 变化时逐个对照 Surge 官方手册人工核对。
 - **mihomo 实际校验**：CI 直接对所有 `expected.mihomo.*` 快照文件执行 `mihomo -t`（`scripts/mihomo-check.sh <mihomo 可执行文件>`，本地也可运行）。
 
 ## 仓库结构

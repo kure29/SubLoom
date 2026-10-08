@@ -46,13 +46,19 @@ export class ExportContext {
 
 export type RuleSetSource = NonNullable<RuleSet['sources'][keyof RuleSet['sources']]>
 
-/** 节点子功能检查中的警告；field 为相对节点的路径，如 tls.clientFingerprint */
+/** 节点子功能检查中的 UNSUPPORTED_PROXY_FEATURE 警告；field 为相对节点的路径，如 tls.clientFingerprint */
 export type ProxyWarn = (
-  code: 'UNSUPPORTED_PROXY_FEATURE',
   field: string,
-  action: 'dropped' | 'downgraded',
+  action: CompatWarning['action'],
   message: string,
+  level?: CompatWarning['level'],
 ) => void
+
+/** adaptProxy 的结果：可能去掉了某些字段的节点，以及导出器需要的附加数据 */
+export interface AdaptedProxy {
+  node: ProxyNode
+  data?: unknown
+}
 
 export interface TargetSpec {
   target: ExtraSource
@@ -69,9 +75,13 @@ export interface TargetSpec {
    * 节点子功能检查（类型已确认受支持）：返回 undefined 表示移除节点，
    * 否则返回（可能去掉了某些字段的）节点。每处改动都要调用 warn。
    */
-  adaptProxy?(node: ProxyNode, warn: ProxyWarn): ProxyNode | undefined
-  /** 规则参数检查：返回不支持的原因，规则会被移除 */
-  checkRule?(rule: RuleCondition): string | undefined
+  adaptProxy?(node: ProxyNode, warn: ProxyWarn): AdaptedProxy | undefined
+  /** 规则检查（每个条件，含逻辑规则的子条件）：返回警告时整条规则被移除 */
+  checkRule?(
+    rule: RuleCondition,
+  ): { code: 'UNSUPPORTED_RULE_PARAM' | 'UNSUPPORTED_RULE_VALUE'; message: string } | undefined
+  /** 把节点名和组名中客户端无法表示的字符替换掉；引用同步替换 */
+  sanitizeName?(name: string): string
 }
 
 export interface ResolvedProxy {
@@ -80,10 +90,14 @@ export interface ResolvedProxy {
   name: string
   path: string
   extra: Record<string, unknown> | undefined
+  /** adaptProxy 返回的附加数据 */
+  data?: unknown
 }
 
 export interface ResolvedGroup {
   group: ProxyGroup
+  /** 替换字符后的名称 */
+  name: string
   path: string
   /** 降级后的类型 */
   type: ProxyGroupType
@@ -117,6 +131,9 @@ export interface ResolvedProfile {
 }
 
 /** 不支持的组类型依次尝试的替代类型 */
+/** 警告信息中的客户端名称 */
+const LABELS: Record<ExtraSource, string> = { mihomo: 'mihomo', surge: 'Surge', uri: 'URI' }
+
 const GROUP_FALLBACK: Record<ProxyGroupType, ProxyGroupType[]> = {
   select: [],
   'url-test': ['select'],
@@ -124,17 +141,31 @@ const GROUP_FALLBACK: Record<ProxyGroupType, ProxyGroupType[]> = {
   'load-balance': ['url-test', 'select'],
 }
 
-function uniqueGroups(groups: ProxyGroup[], ctx: ExportContext) {
+function sanitized(spec: TargetSpec, name: string, path: string, ctx: ExportContext): string {
+  const clean = spec.sanitizeName?.(name) ?? name
+  if (clean !== name) {
+    ctx.warn(
+      'INVALID_NAME_CHARS',
+      `${path}.name`,
+      'kept',
+      `characters that ${LABELS[spec.target]} cannot use in names were replaced`,
+    )
+  }
+  return clean
+}
+
+function uniqueGroups(spec: TargetSpec, groups: ProxyGroup[], ctx: ExportContext) {
   const seen = new Set<string>()
-  const kept: Array<{ group: ProxyGroup; path: string }> = []
+  const kept: Array<{ group: ProxyGroup; name: string; path: string }> = []
   groups.forEach((group, i) => {
     const path = `groups[${i}]`
-    if (seen.has(group.name)) {
+    const name = sanitized(spec, group.name, path, ctx)
+    if (seen.has(name)) {
       ctx.warn('DUPLICATE_GROUP_NAME', path, 'dropped', 'a group with the same name already exists')
       return
     }
-    seen.add(group.name)
-    kept.push({ group, path })
+    seen.add(name)
+    kept.push({ group, name, path })
   })
   return kept
 }
@@ -145,23 +176,23 @@ function supportedProxies(
   ctx: ExportContext,
 ) {
   const types = new Set(spec.capabilities.proxyTypes)
-  const kept: Array<{ node: ProxyNode; path: string }> = []
+  const kept: Array<{ node: ProxyNode; path: string; data?: unknown }> = []
   for (const { node, path } of entries) {
     if (!types.has(node.type)) {
       ctx.warn(
         'UNSUPPORTED_PROXY_TYPE',
         path,
         'dropped',
-        `${spec.target} does not support ${node.type} proxies`,
+        `${LABELS[spec.target]} does not support ${node.type} proxies`,
       )
       continue
     }
     const adapted = spec.adaptProxy
-      ? spec.adaptProxy(node, (code, field, action, message) =>
-          ctx.warn(code, `${path}.${field}`, action, message),
+      ? spec.adaptProxy(node, (field, action, message, level) =>
+          ctx.warn('UNSUPPORTED_PROXY_FEATURE', `${path}.${field}`, action, message, level),
         )
-      : node
-    if (adapted) kept.push({ node: adapted, path })
+      : { node }
+    if (adapted) kept.push({ ...adapted, path })
   }
   return kept
 }
@@ -172,16 +203,18 @@ function supportedProxies(
  * 返回最终名称列表，以及原名 → 第一个同名节点最终名称的映射（供组成员和规则引用）。
  */
 function assignNames(
+  spec: TargetSpec,
   entries: Array<{ node: ProxyNode; path: string }>,
   groups: ReadonlySet<string>,
-  builtins: ReadonlySet<string>,
   ctx: ExportContext,
 ) {
-  const reserved = new Set([...groups, ...builtins, ...entries.map((e) => e.node.name)])
+  const builtins = spec.builtins
+  const clean = entries.map(({ node, path }) => sanitized(spec, node.name, path, ctx))
+  const reserved = new Set([...groups, ...builtins, ...clean])
   const used = new Set<string>()
   const firstName = new Map<string, string>()
-  const names = entries.map(({ node, path }) => {
-    const original = node.name
+  const names = entries.map(({ node, path }, i) => {
+    const original = clean[i] ?? node.name
     let name = original
     if (used.has(name) || groups.has(name) || builtins.has(name)) {
       let n = 2
@@ -195,7 +228,8 @@ function assignNames(
       )
     }
     used.add(name)
-    if (!firstName.has(original)) firstName.set(original, name)
+    // 引用按来源中的名称查找
+    if (!firstName.has(node.name)) firstName.set(node.name, name)
     return name
   })
   return { names, firstName }
@@ -214,31 +248,29 @@ function groupType(
     'UNSUPPORTED_GROUP_TYPE',
     `${path}.type`,
     'downgraded',
-    `${spec.target} does not support ${group.type} groups; ${type} is used instead`,
+    `${LABELS[spec.target]} does not support ${group.type} groups; ${type} is used instead`,
   )
   return type
 }
 
+/** 来源中的名称 → 输出中的名称；找不到时为 undefined */
+interface Names {
+  group(name: string): string | undefined
+  proxy(name: string): string | undefined
+}
+
 function resolveGroup(
   spec: TargetSpec,
-  group: ProxyGroup,
-  path: string,
-  groupNames: ReadonlySet<string>,
-  proxyName: ReadonlyMap<string, string>,
+  { group, name, path }: { group: ProxyGroup; name: string; path: string },
+  names: Names,
   ctx: ExportContext,
 ): ResolvedGroup {
   const type = groupType(spec, group, path, ctx)
   const members: string[] = []
   group.members.forEach((m, j) => {
-    const name =
-      m.kind === 'builtin'
-        ? m.name
-        : m.kind === 'group'
-          ? groupNames.has(m.name)
-            ? m.name
-            : undefined
-          : proxyName.get(m.name)
-    if (name === undefined) {
+    const member =
+      m.kind === 'builtin' ? m.name : m.kind === 'group' ? names.group(m.name) : names.proxy(m.name)
+    if (member === undefined) {
       ctx.warn(
         'UNKNOWN_GROUP_MEMBER',
         `${path}.members[${j}]`,
@@ -246,7 +278,7 @@ function resolveGroup(
         `the ${m.kind} referenced by this member does not exist or was dropped`,
       )
     } else {
-      members.push(name)
+      members.push(member)
     }
   })
   const extra = ctx.extra(group.extra, path)
@@ -255,7 +287,7 @@ function resolveGroup(
     members.push('DIRECT')
     ctx.warn('EMPTY_GROUP', path, 'downgraded', 'the group has no members left; DIRECT was added')
   }
-  return { group, path, type, members, extra }
+  return { group, name, path, type, members, extra }
 }
 
 /** raw.githubusercontent.com 和 github.com/<owner>/<repo>/raw 的地址 */
@@ -319,12 +351,19 @@ const OPTION_PATH = 'options.ruleSetPolicy'
 function ruleSetPolicy(
   spec: TargetSpec,
   groups: ResolvedGroup[],
+  names: Names,
   opts: ExportOptions,
   ctx: ExportContext,
 ): string | undefined {
-  let policy = opts.ruleSetPolicy ?? groups.find((g) => g.type === 'select')?.group.name
-  if (policy === undefined) policy = 'DIRECT'
-  else if (policy !== 'DIRECT' && !groups.some((g) => g.group.name === policy)) {
+  const chosen = opts.ruleSetPolicy
+  let policy =
+    chosen === undefined
+      ? groups.find((g) => g.type === 'select')?.name
+      : chosen === 'DIRECT'
+        ? chosen
+        : names.group(chosen)
+  if (policy === undefined && chosen === undefined) policy = 'DIRECT'
+  else if (policy === undefined) {
     ctx.warn(
       'UNKNOWN_RULE_SET_POLICY',
       OPTION_PATH,
@@ -340,7 +379,7 @@ function ruleSetPolicy(
       'RULE_SET_PROXY_UNSUPPORTED',
       OPTION_PATH,
       'dropped',
-      `${spec.target} cannot download rule sets through a policy group` +
+      `${LABELS[spec.target]} cannot download rule sets through a policy group` +
         (mirrored ? '' : '; use a rule set mirror if the original URLs are not reachable directly'),
       mirrored ? 'info' : 'warn',
     )
@@ -356,8 +395,7 @@ function resolveRules(
   spec: TargetSpec,
   rules: Rule[],
   ruleSets: ReadonlyMap<string, ResolvedRuleSet>,
-  groupNames: ReadonlySet<string>,
-  proxyName: ReadonlyMap<string, string>,
+  names: Names,
   ctx: ExportContext,
 ): ResolvedRule[] {
   const caps = spec.capabilities
@@ -374,14 +412,14 @@ function resolveRules(
         'UNSUPPORTED_RULE_TYPE',
         path,
         'dropped',
-        `${spec.target} does not support ${unsupported.type} rules`,
+        `${LABELS[spec.target]} does not support ${unsupported.type} rules`,
       )
       return
     }
     for (const c of all) {
-      const reason = spec.checkRule?.(c)
-      if (reason !== undefined) {
-        ctx.warn('UNSUPPORTED_RULE_PARAM', path, 'dropped', reason)
+      const problem = spec.checkRule?.(c)
+      if (problem !== undefined) {
+        ctx.warn(problem.code, path, 'dropped', problem.message)
         return
       }
     }
@@ -395,9 +433,8 @@ function resolveRules(
       return
     }
     const target =
-      groupNames.has(rule.target) || spec.builtins.has(rule.target)
-        ? rule.target
-        : proxyName.get(rule.target)
+      names.group(rule.target) ??
+      (spec.builtins.has(rule.target) ? rule.target : names.proxy(rule.target))
     if (target === undefined) {
       ctx.warn('UNKNOWN_RULE_TARGET', path, 'dropped', 'the rule target does not exist')
       return
@@ -415,8 +452,8 @@ export function resolveProfile(
   opts: ExportOptions,
   ctx: ExportContext,
 ): ResolvedProfile {
-  const uniq = uniqueGroups(profile.groups, ctx)
-  const groupNames = new Set(uniq.map((g) => g.group.name))
+  const uniq = uniqueGroups(spec, profile.groups, ctx)
+  const groupNames = new Set(uniq.map((g) => g.name))
 
   const entries = supportedProxies(
     spec,
@@ -426,19 +463,25 @@ export function resolveProfile(
     ],
     ctx,
   )
-  const { names, firstName } = assignNames(entries, groupNames, spec.builtins, ctx)
-  const proxies = entries.map(({ node, path }, i) => ({
+  const { names: proxyNames, firstName } = assignNames(spec, entries, groupNames, ctx)
+  const proxies = entries.map(({ node, path, data }, i) => ({
     node,
     path,
-    name: names[i] ?? node.name,
+    name: proxyNames[i] ?? node.name,
     extra: ctx.extra(node.extra, path),
+    ...(data !== undefined && { data }),
   }))
+  const names: Names = {
+    group(name) {
+      const clean = spec.sanitizeName?.(name) ?? name
+      return groupNames.has(clean) ? clean : undefined
+    },
+    proxy: (name) => firstName.get(name),
+  }
 
-  const groups = uniq.map(({ group, path }) =>
-    resolveGroup(spec, group, path, groupNames, firstName, ctx),
-  )
+  const groups = uniq.map((g) => resolveGroup(spec, g, names, ctx))
   const ruleSets = resolveRuleSets(spec, profile, opts.ruleSetMirror ?? 'original', ctx)
-  const policy = ruleSets.size ? ruleSetPolicy(spec, groups, opts, ctx) : undefined
-  const rules = resolveRules(spec, profile.rules, ruleSets, groupNames, firstName, ctx)
+  const policy = ruleSets.size ? ruleSetPolicy(spec, groups, names, opts, ctx) : undefined
+  const rules = resolveRules(spec, profile.rules, ruleSets, names, ctx)
   return { proxies, groups, ruleSets, rules, ruleSetPolicy: policy }
 }

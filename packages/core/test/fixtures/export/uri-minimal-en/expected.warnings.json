@@ -1,4 +1,27 @@
 {
   "pipeline": [],
-  "export": []
+  "mihomo": [],
+  "surge": [
+    {
+      "level": "warn",
+      "path": "nodes[3].tls.clientFingerprint",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support uTLS fingerprints",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[4].transport",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support the grpc transport",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[5]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    }
+  ]
 }

@@ -5,6 +5,7 @@ import {
   createTemplate,
   ExportOptionsSchema,
   exportMihomo,
+  exportSurge,
   type ImportResult,
   importMihomoYaml,
   importSubscription,
@@ -77,8 +78,10 @@ function generate(c: Case) {
   const imported = c.subscription === undefined ? undefined : subscription(c.subscription)
   const nodes = [...(imported?.proxies ?? []), ...(c.nodes ?? [])]
   const pipeline = runPipeline(nodes, c.pipeline ?? [])
-  const result = exportMihomo(profileOf(c, imported), pipeline.nodes, c.options)
-  return { imported, nodes: pipeline.nodes, pipeline, result }
+  const profile = profileOf(c, imported)
+  const result = exportMihomo(profile, pipeline.nodes, c.options)
+  const surge = exportSurge(profile, pipeline.nodes, c.options)
+  return { imported, nodes: pipeline.nodes, pipeline, result, surge }
 }
 
 const cases = Object.entries(inputs)
@@ -117,9 +120,15 @@ describe('golden: export fixtures', () => {
     )
   })
 
+  it.each(cases)('$name matches expected.surge.conf', async ({ name }) => {
+    await expect(output(name).surge.text).toMatchFileSnapshot(
+      `./fixtures/export/${name}/expected.surge.conf`,
+    )
+  })
+
   it.each(cases)('$name matches expected.warnings.json', async ({ name }) => {
-    const { pipeline, result } = output(name)
-    const warnings = { pipeline: pipeline.warnings, export: result.warnings }
+    const { pipeline, result, surge } = output(name)
+    const warnings = { pipeline: pipeline.warnings, mihomo: result.warnings, surge: surge.warnings }
     await expect(`${JSON.stringify(warnings, null, 2)}\n`).toMatchFileSnapshot(
       `./fixtures/export/${name}/expected.warnings.json`,
     )

@@ -18,16 +18,20 @@ const LIMITED: TargetSpec = {
     set.sources.surge ?? { code: 'RULE_SET_NO_SOURCE', message: 'no surge source' },
   adaptProxy(node, warn) {
     if (node.type === 'trojan' && node.transport) {
-      warn('UNSUPPORTED_PROXY_FEATURE', 'transport', 'dropped', 'no transport')
+      warn('transport', 'dropped', 'no transport')
       return undefined
     }
     if (node.type === 'trojan' && node.tls.clientFingerprint) {
-      warn('UNSUPPORTED_PROXY_FEATURE', 'tls.clientFingerprint', 'downgraded', 'no uTLS')
+      warn('tls.clientFingerprint', 'downgraded', 'no uTLS')
       const { clientFingerprint: _, ...tls } = node.tls
-      return { ...node, tls }
+      return { node: { ...node, tls }, data: 'adapted' }
     }
-    return node
+    if (node.type === 'trojan' && node.tls.ech) {
+      warn('tls.ech', 'kept', 'ECH may not work', 'info')
+    }
+    return { node }
   },
+  sanitizeName: (name) => name.replace(/,/g, '，'),
 }
 
 /** 与 LIMITED 相同，但支持通过策略组下载规则集 */
@@ -148,11 +152,70 @@ describe('unsupported proxy features', () => {
     ])
   })
 
-  it('keeps the node the target adapted', () => {
+  it('keeps the node the target adapted, with its data', () => {
     const r = resolve(profile(), [trojan('fp', { tls: { sni: 'a', clientFingerprint: 'chrome' } })])
-    expect(r.proxies.map((p) => p.node)).toEqual([trojan('fp', { tls: { sni: 'a' } })])
+    expect(r.proxies.map((p) => [p.node, p.data])).toEqual([
+      [trojan('fp', { tls: { sni: 'a' } }), 'adapted'],
+    ])
     expect(codes(r.warnings)).toEqual([
       ['UNSUPPORTED_PROXY_FEATURE', 'nodes[0].tls.clientFingerprint', 'downgraded'],
+    ])
+  })
+
+  it('passes the level of feature warnings through', () => {
+    const r = resolve(profile(), [trojan('ech', { tls: { ech: {} } })])
+    expect(r.proxies).toHaveLength(1)
+    expect(r.warnings).toEqual([
+      expect.objectContaining({
+        level: 'info',
+        code: 'UNSUPPORTED_PROXY_FEATURE',
+        path: 'nodes[0].tls.ech',
+        action: 'kept',
+      }),
+    ])
+  })
+})
+
+describe('name sanitizing', () => {
+  it('cleans proxy and group names before resolving conflicts and keeps references working', () => {
+    const r = resolve(
+      profile({
+        proxies: [ss('a,b'), ss('a，b')],
+        groups: [
+          {
+            name: 'G,1',
+            type: 'select',
+            members: [
+              { kind: 'proxy', name: 'a,b' },
+              { kind: 'proxy', name: 'a，b' },
+              { kind: 'group', name: 'H' },
+            ],
+          },
+          { name: 'H', type: 'select', members: [{ kind: 'group', name: 'G,1' }] },
+          { name: 'G，1', type: 'select', members: [{ kind: 'builtin', name: 'DIRECT' }] },
+        ],
+        ruleSets: [set('s')],
+        rules: [
+          { type: 'DOMAIN', value: 'a.example.com', target: 'a,b' },
+          { type: 'RULE-SET', value: 's', target: 'G,1' },
+        ],
+      }),
+      [],
+      { ruleSetPolicy: 'G,1' },
+      PROXIED,
+    )
+    expect(r.groups.map((g) => [g.name, g.members])).toEqual([
+      ['G，1', ['a，b', 'a，b 2', 'H']],
+      ['H', ['G，1']],
+    ])
+    expect(r.proxies.map((p) => p.name)).toEqual(['a，b', 'a，b 2'])
+    expect(r.rules.map((x) => x.target)).toEqual(['a，b', 'G，1'])
+    expect(r.ruleSetPolicy).toBe('G，1')
+    expect(codes(r.warnings)).toEqual([
+      ['INVALID_NAME_CHARS', 'groups[0].name', 'kept'],
+      ['DUPLICATE_GROUP_NAME', 'groups[2]', 'dropped'],
+      ['INVALID_NAME_CHARS', 'proxies[0].name', 'kept'],
+      ['DUPLICATE_PROXY_NAME', 'proxies[1]', 'kept'],
     ])
   })
 })
@@ -209,7 +272,8 @@ describe('unsupported rules', () => {
   it('lets the target reject rules by parameter', () => {
     const spec: TargetSpec = {
       ...LIMITED,
-      checkRule: (c) => (c.src ? 'src is not supported' : undefined),
+      checkRule: (c) =>
+        c.src ? { code: 'UNSUPPORTED_RULE_PARAM', message: 'src is not supported' } : undefined,
     }
     const r = resolve(
       profile({

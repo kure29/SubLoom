@@ -1,0 +1,280 @@
+{
+  "pipeline": [],
+  "mihomo": [
+    {
+      "level": "warn",
+      "path": "general.extra.surge",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the surge format cannot be exported to mihomo",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "extra.surge",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the surge format cannot be exported to mihomo",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[2].name",
+      "code": "INVALID_NAME_CHARS",
+      "message": "characters that mihomo cannot use in names were replaced",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[4].name",
+      "code": "INVALID_NAME_CHARS",
+      "message": "characters that mihomo cannot use in names were replaced",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "groups[3].extra.surge",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the surge format cannot be exported to mihomo",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[0]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no mihomo source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[1]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no mihomo source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[2]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no mihomo source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[0]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[1]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[2]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[4]",
+      "code": "UNSUPPORTED_RULE_VALUE",
+      "message": "mihomo rules cannot contain commas in values",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[11]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    }
+  ],
+  "surge": [
+    {
+      "level": "warn",
+      "path": "general.mixedPort",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching profile setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.enhancedMode",
+      "code": "UNSUPPORTED_SETTING",
+      "message": "Surge has no matching DNS setting",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "dns.nameserver[3]",
+      "code": "UNSUPPORTED_DNS_SERVER",
+      "message": "Surge cannot use this DNS server address",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[2].name",
+      "code": "INVALID_NAME_CHARS",
+      "message": "characters that Surge cannot use in names were replaced",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[0].transport.maxEarlyData",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support WebSocket early data",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[0].transport.earlyDataHeaderName",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support WebSocket early data",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[2].transport",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support the grpc transport",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[3].tls.clientFingerprint",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support uTLS fingerprints",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[5].plugin",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support v2ray-plugin",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[6].up",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge only accepts the download bandwidth",
+      "action": "downgraded"
+    },
+    {
+      "level": "info",
+      "path": "nodes[6].obfs",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "the Surge manual lists Salamander obfuscation for Surge Mac only",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[7].congestionController",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge has no TUIC option for congestionController",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[8].tls.ech",
+      "code": "UNSUPPORTED_PROXY_FEATURE",
+      "message": "Surge does not support ECH; the real SNI is sent in plain text",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[9]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[4].name",
+      "code": "INVALID_NAME_CHARS",
+      "message": "characters that Surge cannot use in names were replaced",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[6].name",
+      "code": "INVALID_NAME_CHARS",
+      "message": "characters that Surge cannot use in names were replaced",
+      "action": "kept"
+    },
+    {
+      "level": "info",
+      "path": "ruleSets[1]",
+      "code": "RULE_SET_MIRROR_UNSUPPORTED",
+      "message": "the mirror cannot serve this URL; the original URL is used",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[2]",
+      "code": "UNSUPPORTED_RULE_SET_FORMAT",
+      "message": "Surge does not support the text format with ipcidr behavior",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[5]",
+      "code": "UNSUPPORTED_RULE_TYPE",
+      "message": "Surge does not support GEOSITE rules",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[6]",
+      "code": "UNSUPPORTED_RULE_TYPE",
+      "message": "Surge does not support DOMAIN-REGEX rules",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[10]",
+      "code": "UNSUPPORTED_RULE_PARAM",
+      "message": "Surge cannot match GEOIP rules against the source address",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[11]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "info",
+      "path": "groups[1].filter",
+      "code": "GROUP_FILTER_REWRITTEN",
+      "message": "Surge has no exclude filter; include and exclude were merged into one regular expression",
+      "action": "kept"
+    },
+    {
+      "level": "info",
+      "path": "groups[2].filter",
+      "code": "GROUP_FILTER_REWRITTEN",
+      "message": "Surge has no exclude filter; include and exclude were merged into one regular expression",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "groups[3].testUrl",
+      "code": "UNSUPPORTED_GROUP_OPTION",
+      "message": "Surge has a single global test URL (proxy-test-url); this group uses it instead",
+      "action": "downgraded"
+    },
+    {
+      "level": "info",
+      "path": "rules[17]",
+      "code": "UNREACHABLE_RULE",
+      "message": "rules after the first MATCH never take effect",
+      "action": "dropped"
+    }
+  ]
+}

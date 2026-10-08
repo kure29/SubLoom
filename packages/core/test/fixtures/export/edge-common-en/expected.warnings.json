@@ -1,12 +1,35 @@
 {
   "pipeline": [],
-  "export": [
+  "mihomo": [
     {
       "level": "warn",
       "path": "nodes[7]",
       "code": "DUPLICATE_PROXY_NAME",
       "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
       "action": "kept"
+    }
+  ],
+  "surge": [
+    {
+      "level": "warn",
+      "path": "nodes[3]",
+      "code": "UNSUPPORTED_PROXY_TYPE",
+      "message": "Surge does not support vless proxies",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[7]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in policy",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "options.ruleSetPolicy",
+      "code": "RULE_SET_PROXY_UNSUPPORTED",
+      "message": "Surge cannot download rule sets through a policy group; use a rule set mirror if the original URLs are not reachable directly",
+      "action": "dropped"
     }
   ]
 }

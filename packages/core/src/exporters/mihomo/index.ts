@@ -58,11 +58,23 @@ export const MIHOMO_SPEC: TargetSpec = {
     }
     return source
   },
+  // mihomo 的规则是逗号分隔的字符串，不能加引号：名称中的逗号替换为全角，含逗号的值无法表达
+  sanitizeName: (name) => name.replace(/,/g, '，'),
+  checkRule: (c) =>
+    c.value?.includes(',')
+      ? { code: 'UNSUPPORTED_RULE_VALUE', message: 'mihomo rules cannot contain commas in values' }
+      : undefined,
 }
 
-function convertGroup({ group, type, members, extra }: ResolvedGroup): Record<string, unknown> {
+function convertGroup({
+  group,
+  name,
+  type,
+  members,
+  extra,
+}: ResolvedGroup): Record<string, unknown> {
   const out = compact({
-    name: group.name,
+    name,
     type,
     proxies: members.length ? members : undefined,
     'include-all-proxies': group.includeAllProxies,

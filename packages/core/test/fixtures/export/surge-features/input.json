@@ -1,0 +1,87 @@
+{
+  "description": "Surge 专项：各协议参数、WireGuard 段、名称中的特殊字符、组过滤与测速地址、规则类型映射与 FINAL、RULE-SET/DOMAIN-SET、General/DNS 映射、附加段；规则集走 DIRECT 并使用 jsDelivr 镜像",
+  "profile": {
+    "version": 1,
+    "name": "surge-features",
+    "general": {
+      "mixedPort": 7890,
+      "logLevel": "info",
+      "ipv6": false,
+      "extra": { "surge": { "skip-proxy": "192.168.0.0/16, 10.0.0.0/8, localhost, *.local", "test-timeout": 5 } }
+    },
+    "dns": {
+      "enhancedMode": "fake-ip",
+      "defaultNameserver": ["223.5.5.5"],
+      "nameserver": ["https://dns.alidns.com/dns-query", "tls://1.12.12.12", "119.29.29.29", "dhcp://en0"]
+    },
+    "proxies": [
+      {
+        "name": "WG Home",
+        "type": "wireguard",
+        "server": "198.51.100.41",
+        "port": 51820,
+        "privateKey": "ZmFrZS1wcml2YXRl",
+        "publicKey": "ZmFrZS1wdWJsaWM=",
+        "ip": "10.0.0.2/32",
+        "reserved": [1, 2, 3],
+        "mtu": 1280,
+        "extra": { "mihomo": { "dns": ["10.0.0.1"], "remote-dns-resolve": true } }
+      },
+      { "name": "HTTPS", "type": "http", "server": "http.example.com", "port": 443, "username": "fake-user", "password": "fake,pass", "tls": { "sni": "http.example.com" } }
+    ],
+    "groups": [
+      { "name": "Proxy", "type": "select", "members": [{ "kind": "group", "name": "Auto" }, { "kind": "group", "name": "HK, low ratio" }, { "kind": "proxy", "name": "WG Home" }, { "kind": "builtin", "name": "DIRECT" }], "includeAllProxies": true },
+      { "name": "Auto", "type": "url-test", "members": [], "includeAllProxies": true, "filter": { "exclude": "(?i)ipv6|游戏" }, "testUrl": "https://www.gstatic.com/generate_204", "interval": 300, "tolerance": 50 },
+      { "name": "HK, low ratio", "type": "fallback", "members": [], "includeAllProxies": true, "filter": { "include": "(?i)港|hk", "exclude": "x\\d{2,3}" }, "testUrl": "https://www.gstatic.com/generate_204", "interval": 300 },
+      { "name": "Balance", "type": "load-balance", "members": [{ "kind": "proxy", "name": "VMess WS" }, { "kind": "proxy", "name": "Trojan WS" }], "testUrl": "https://cp.example.com/generate_204", "extra": { "surge": { "persistent": true } } }
+    ],
+    "ruleSets": [
+      {
+        "id": "openai",
+        "name": "OpenAI",
+        "behavior": "classical",
+        "sources": { "surge": { "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/OpenAI/OpenAI.list", "format": "list" } },
+        "interval": 86400
+      },
+      { "id": "ads", "name": "Ads", "behavior": "domain", "sources": { "surge": { "url": "https://rules.example.com/ads.txt", "format": "text" } } },
+      { "id": "cn-ip", "name": "CN IP", "behavior": "ipcidr", "sources": { "surge": { "url": "https://rules.example.com/cn.txt", "format": "text" } } }
+    ],
+    "rules": [
+      { "type": "RULE-SET", "value": "ads", "target": "REJECT" },
+      { "type": "RULE-SET", "value": "openai", "target": "Proxy" },
+      { "type": "AND", "children": [{ "type": "RULE-SET", "value": "openai" }, { "type": "DST-PORT", "value": "443" }], "target": "Auto" },
+      { "type": "DOMAIN-SUFFIX", "value": "hk.example.com", "target": "HK, low ratio" },
+      { "type": "DOMAIN-KEYWORD", "value": "a,b", "target": "Proxy" },
+      { "type": "GEOSITE", "value": "google", "target": "Proxy" },
+      { "type": "DOMAIN-REGEX", "value": "^ad\\.", "target": "REJECT" },
+      { "type": "PROCESS-NAME", "value": "Telegram", "target": "Proxy" },
+      { "type": "SRC-IP-CIDR", "value": "192.168.1.0/24", "target": "DIRECT" },
+      { "type": "IP-CIDR", "value": "192.168.2.0/24", "src": true, "target": "REJECT" },
+      { "type": "GEOIP", "value": "CN", "src": true, "target": "DIRECT" },
+      { "type": "RULE-SET", "value": "cn-ip", "noResolve": true, "target": "DIRECT" },
+      { "type": "IP-CIDR", "value": "10.0.0.0/8", "noResolve": true, "target": "WG Home" },
+      { "type": "IP-ASN", "value": "13335", "noResolve": true, "target": "Balance" },
+      { "type": "OR", "children": [{ "type": "NOT", "children": [{ "type": "DST-PORT", "value": "80" }] }, { "type": "IP-CIDR6", "value": "2001:db8::/32" }], "target": "Proxy" },
+      { "type": "GEOIP", "value": "CN", "target": "DIRECT" },
+      { "type": "MATCH", "target": "Proxy" },
+      { "type": "DOMAIN", "value": "after.example.com", "target": "DIRECT" }
+    ],
+    "extra": {
+      "surge": { "MITM": ["hostname = -*.apple.com, api.example.com"], "Host": ["router.local = 192.168.1.1"] }
+    }
+  },
+  "nodes": [
+    { "name": "VMess WS", "type": "vmess", "server": "vmess.example.com", "port": 443, "uuid": "00000000-0000-4000-8000-000000000001", "alterId": 0, "cipher": "auto", "tls": { "sni": "cdn.example.com", "alpn": ["h2", "http/1.1"] }, "transport": { "type": "ws", "path": "/ws?ed=2048", "host": "cdn.example.com", "maxEarlyData": 2048, "earlyDataHeaderName": "Sec-WebSocket-Protocol" } },
+    { "name": "VMess legacy", "type": "vmess", "server": "198.51.100.2", "port": 10086, "uuid": "00000000-0000-4000-8000-000000000002", "alterId": 64, "cipher": "chacha20-poly1305" },
+    { "name": "VMess gRPC", "type": "vmess", "server": "grpc.example.com", "port": 443, "uuid": "00000000-0000-4000-8000-000000000003", "alterId": 0, "cipher": "auto", "tls": {}, "transport": { "type": "grpc", "serviceName": "svc" } },
+    { "name": "Trojan WS", "type": "trojan", "server": "trojan.example.com", "port": 443, "password": "fake-trojan", "tls": { "sni": "trojan.example.com", "clientFingerprint": "chrome", "certFingerprint": "8F:1D:2B:3C:4D:5E:6F:70:81:92:A3:B4:C5:D6:E7:F8:09:1A:2B:3C:4D:5E:6F:70:81:92:A3:B4:C5:D6:E7:F8" }, "transport": { "type": "ws", "path": "/trojan" } },
+    { "name": "🇭🇰 HK 01, IPLC x1.5 #1", "type": "ss", "server": "hk1.example.com", "port": 8388, "cipher": "2022-blake3-aes-128-gcm", "password": "ZmFrZS1zcy0yMDIyLWtleQ==", "plugin": { "type": "obfs", "mode": "http", "host": "bing.com" } },
+    { "name": "🇭🇰 HK 02 v2ray", "type": "ss", "server": "hk2.example.com", "port": 443, "cipher": "aes-256-gcm", "password": "fake-ss", "plugin": { "type": "v2ray-plugin", "mode": "websocket", "host": "hk2.example.com", "tls": true } },
+    { "name": "🇯🇵 JP Hy2 =fast", "type": "hysteria2", "server": "jp.example.com", "port": 443, "password": "fake-hy2", "ports": "443,20000-30000", "up": "30 Mbps", "down": "200 Mbps", "obfs": { "type": "salamander", "password": "fake-obfs" }, "tls": { "sni": "jp.example.com", "skipCertVerify": true } },
+    { "name": "🇸🇬 SG TUIC", "type": "tuic", "server": "sg.example.com", "port": 443, "uuid": "00000000-0000-4000-8000-000000000004", "password": "fake-tuic", "congestionController": "bbr", "tls": { "alpn": ["h3"], "sni": "sg.example.com" } },
+    { "name": "🇺🇸 US AnyTLS", "type": "anytls", "server": "us.example.com", "port": 443, "password": "fake-anytls", "tls": { "sni": "us.example.com", "ech": {} } },
+    { "name": "🇺🇸 US Reality", "type": "vless", "server": "us2.example.com", "port": 443, "uuid": "00000000-0000-4000-8000-000000000005", "flow": "xtls-rprx-vision", "tls": { "sni": "www.example.com", "reality": { "publicKey": "Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm8", "shortId": "01" } } },
+    { "name": "SOCKS5", "type": "socks5", "server": "198.51.100.42", "port": 1080, "username": "fake-user", "password": "fake-pass", "tfo": true }
+  ],
+  "options": { "ruleSetPolicy": "DIRECT", "ruleSetMirror": "jsdelivr" }
+}

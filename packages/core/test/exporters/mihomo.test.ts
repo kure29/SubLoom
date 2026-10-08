@@ -406,6 +406,28 @@ describe('name conflicts', () => {
     ])
   })
 
+  it('replaces commas in names because rules cannot quote them', () => {
+    const { doc, warnings } = exp(
+      profile({
+        groups: [{ name: 'HK, low', type: 'select', members: [{ kind: 'proxy', name: 'a,b' }] }],
+        rules: [
+          { type: 'DOMAIN-KEYWORD', value: 'x,y', target: 'HK, low' },
+          { type: 'DOMAIN', value: 'a.example.com', target: 'a,b' },
+          { type: 'MATCH', target: 'HK, low' },
+        ],
+      }),
+      [ss('a,b')],
+    )
+    expect(doc.proxies.map((p) => p.name)).toEqual(['a，b'])
+    expect(doc['proxy-groups']).toEqual([{ name: 'HK， low', type: 'select', proxies: ['a，b'] }])
+    expect(doc.rules).toEqual(['DOMAIN,a.example.com,a，b', 'MATCH,HK， low'])
+    expect(codes(warnings)).toEqual([
+      ['INVALID_NAME_CHARS', 'groups[0].name', 'kept'],
+      ['INVALID_NAME_CHARS', 'nodes[0].name', 'kept'],
+      ['UNSUPPORTED_RULE_VALUE', 'rules[0]', 'dropped'],
+    ])
+  })
+
   it('drops duplicate groups, keeping the first', () => {
     const { doc, warnings } = exp(
       profile({
