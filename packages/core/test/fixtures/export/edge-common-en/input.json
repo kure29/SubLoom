@@ -1,0 +1,5 @@
+{
+  "description": "uri-edge-cases（含重名节点）→ 常用分流模板（英文），不经流水线：重名节点自动改名并警告",
+  "subscription": "uri-edge-cases",
+  "template": { "id": "common", "locale": "en" }
+}

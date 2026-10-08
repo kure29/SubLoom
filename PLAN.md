@@ -159,6 +159,7 @@ interface RuleCondition {
   value?: string            // MATCH 无 value；RULE-SET 的 value 为 ruleSet id
   children?: RuleCondition[] // AND / OR / NOT 的子条件（子条件没有 target）
   noResolve?: boolean
+  src?: boolean             // 按来源 IP 匹配（mihomo 的 src 参数），仅 IP-CIDR、IP-CIDR6、GEOIP、IP-ASN、RULE-SET
 }
 
 interface Rule extends RuleCondition {
@@ -193,7 +194,9 @@ interface Profile {
 ### IR 约定
 
 - 字段名统一 camelCase，与来源格式无关。节点的 TS 类型名为 `ProxyNode`（避免遮蔽全局 `Proxy`），schema 为 `ProxySchema`。
-- **规范形式**：默认值为 false 的可选布尔字段（`udp`、`tfo`、`skipCertVerify`、`hidden`、`noResolve` 等），值为 false 时省略，由导入器负责规范化。来源无法表达的信息不编造：例如 URI 无法表示 UDP，URI 导入的节点不设置 `udp`。
+- **规范形式**：默认值为 false 的可选布尔字段（`tfo`、`skipCertVerify`、`hidden`、`noResolve`、`src` 等），值为 false 时省略，由导入器负责规范化。来源无法表达的信息不编造。
+- **`udp` 是三态**，不按上一条省略 false：`true` / `false` 表示来源明确给出的值，未设置表示来源无法表达（如 URI 链接），导出时按导出选项 `defaultUdp` 处理。mihomo YAML 能表达 UDP，未写 `udp` 时按 mihomo 的默认值记录：hysteria2、tuic 为 `true`（mihomo 对这两种协议总是开启 UDP），其余为 `false`。
+- **规则参数**：mihomo 的 `no-resolve`、`src` 参数分别映射为 `noResolve`、`src`（子条件同样适用）。`src` 只允许出现在 mihomo 支持它的规则类型上，丢弃它会把"按来源 IP 匹配"变成"按目标 IP 匹配"，因此必须保留；其余参数丢弃并给出 `UNSUPPORTED_RULE_PARAM` 警告。
 - **extra 按来源格式分命名空间**：如 `extra: { mihomo: { 'ip-version': 'ipv4' } }`、`extra: { uri: { pinSHA256: '...' } }`，键名和嵌套结构保持来源原样（mihomo 子对象中剩余的键放在同名子对象下，如 `{ 'ws-opts': { ... } }`）。导出器只合并与自己格式相同的那份，其余给出警告。
 - `tls`、`transport` 只出现在适用的协议上（如 ss 没有 `transport`），不放在公共字段里。`tls` 存在即启用 TLS；trojan、hysteria2、tuic、anytls 的 `tls` 始终存在（可为 `{}`）。uTLS 指纹为 `tls.clientFingerprint`，证书指纹为 `tls.certFingerprint`。
 
@@ -225,15 +228,30 @@ interface CompatWarning {
   action: 'dropped' | 'downgraded' | 'kept'
 }
 
+interface ExportOptions {
+  defaultUdp?: boolean      // 节点未设置 udp 时是否开启 UDP，默认 true
+}
+
 interface Exporter {
   target: Target
   capabilities: Capabilities
-  export(profile: Profile, nodes: Proxy[], opts: ExportOptions): { text: string; warnings: CompatWarning[] }
+  export(profile: Profile, nodes: ProxyNode[], opts?: ExportOptions): { text: string; warnings: CompatWarning[] }
 }
 ```
 
-- 协议字段到各客户端的映射用**表驱动**写法，不要散落在 if-else 里。
+- `nodes` 是经过流水线处理的订阅节点。输出的节点列表为 `profile.proxies` 在前、`nodes` 在后。
+- 协议字段到各客户端的映射用**表驱动**写法，不要散落在 if-else 里。导入器和导出器共用同一张字段表。
 - 降级规则示例：目标不支持 `load-balance` 时降级为 `url-test` 并警告；不支持的节点类型直接移除并警告；引用了被移除的组或节点的地方同步清理。
+- **名称冲突**：节点重名（含与策略组名、内置目标重名）时，后出现的节点自动改名为 `名称 2`、`名称 3`……并警告；策略组成员和规则中引用该名称的地方指向第一个同名节点。策略组重名时保留第一个，其余移除并警告。
+- **悬空引用**：策略组中找不到的节点或组成员移除并警告；移除后没有任何成员（且没有 `includeAllProxies` 等自动包含方式）的组补上 `DIRECT` 并警告；目标不存在的规则、引用了不存在或不可用规则集的规则移除并警告。
+- **extra**：只合并与目标格式同名的命名空间（深度合并，IR 字段优先），其余命名空间丢弃并给出 `EXTRA_IGNORED` 警告。
+
+### mihomo 导出器
+
+- 输出顺序：general 字段 → 顶层 extra → `dns` → `proxies` → `proxy-groups` → `rule-providers` → `rules`。
+- 规则集输出为 `rule-providers`（`type: http`，键为 RuleSet 的 `id`）+ `RULE-SET,<id>,<target>` 规则。没有 `sources.mihomo`、格式为 `list`、或 `classical` 行为配 `mrs` 格式的规则集无法使用，移除并警告。
+- 节点直接写入 `proxies`。`proxy-providers`（指向托管节点列表的链接）依赖 M4 的输出链接，届时再做。
+- YAML 用 `yaml` 库生成，不折行；按 YAML 1.1 规则给可能被误读的字符串（如 `01234567`、`yes`、`1_000`）加引号，保证 mihomo（go-yaml）读到的仍是字符串。
 
 ### 节点处理流水线
 
@@ -250,6 +268,20 @@ type PipelineOp =
   | { op: 'dedupe'; by: 'name' | 'server' }
   | { op: 'prefix' | 'suffix'; text: string }
 ```
+
+- `runPipeline(nodes, ops)` 是纯函数，按顺序执行，返回 `{ nodes, warnings }`。它只处理订阅节点，手动添加的节点（`profile.proxies`）不经过流水线。
+- **正则**：JavaScript RegExp 语法，只匹配节点名称；为与 mihomo 策略组的 `filter` 写法兼容，允许以 `(?i)` 开头表示忽略大小写。`rename-regex` 全局替换，替换串支持 `$1` 等。正则非法时跳过该操作并警告，不中断流水线。
+- **地区**：`regions` 使用 ISO 3166-1 alpha-2 代码（如 `HK`、`JP`、`US`）。地区由节点名识别：优先看国旗 emoji，其次按内置地区表匹配中英文名称、常见城市和代码（ASCII 代码按单词边界、区分大小写匹配，避免 `US` 误中 `RUSSIA`）。识别不出地区的节点：`filter-region` 的 keep 模式丢弃、drop 模式保留。
+- `add-flag`：在名称前加地区国旗和一个空格；名称已以国旗开头或识别不出地区时不变。
+- `sort`：稳定排序。`name` 按 `Intl.Collator`（numeric）比较；`region` 按内置地区表的顺序（常见地区在前），识别不出地区的节点无论升降序都排在最后。
+- `dedupe`：保留第一个。`name` 按名称；`server` 按 `type + server + port`。
+
+### 预设模板
+
+- `createTemplate(id, { locale })` 返回一个不含节点的 `Profile`，`id` 为 `minimal`（极简）或 `common`（常用分流），`locale` 为 `zh-CN` 或 `en`，只影响 profile 名称和策略组名称。
+- 策略组用 `includeAllProxies` 包含订阅节点。
+- **极简**：节点选择（select）、自动选择（url-test）；规则只有局域网直连（内联 IP-CIDR，no-resolve）、`GEOIP,CN` 直连和 `MATCH`。
+- **常用分流**：在极简基础上增加 AI、YouTube、Google、Telegram、Microsoft 分组和漏网之鱼；规则集引用 [blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script)（同名规则同时提供 Clash、Surge、Shadowrocket、Loon 格式），只引用 URL、不复制内容。只选用可单独使用的规则文件（如 `Lan.yaml`），不选需要与 `_Domain` 文件配合的拆分规则。
 
 ---
 
@@ -418,7 +450,7 @@ GET /sub/:token
 ## 8. 测试与 CI
 
 - **core**：每个导入器和导出器都有 golden 测试（`test/fixtures/<case>/input.*` 与 `expected.<target>.*`）。更新快照必须是有意为之。
-- **mihomo 实际校验**：CI 下载 mihomo 二进制，对所有 mihomo golden 输出执行 `mihomo -t`。注意 GEOIP/GEOSITE 规则可能需要提前准备数据文件。
+- **mihomo 实际校验**：CI 按固定版本（tag + commit SHA）从源码构建 mihomo（go.sum 校验依赖），对所有 `expected.mihomo.*` golden 输出执行 `mihomo -t`。GEOIP/GEOSITE 数据文件由 mihomo 首次运行时自动下载，所有文件共用一个数据目录并在 CI 中缓存。
 - **server**：同一套 API 集成测试分别在 Node（better-sqlite3）和 Workers（vitest-pool-workers + D1/KV 模拟）下运行。
 - **性能基准**：500 节点订阅 → 解析 → 流水线 → 导出，记录耗时，在 CI 中监控回退。
 - **CI 流程**：lint → typecheck → test → build；main 分支打 tag 时发布 Docker 镜像。
@@ -439,11 +471,11 @@ GET /sub/:token
 ### M1 core：IR 与 mihomo
 - [x] IR zod schema（第 4 节）
 - [x] 导入器：mihomo YAML；URI（ss、vmess、vless 含 reality、trojan、hysteria2）；Base64 订阅自动识别
-- [ ] mihomo 导出器（含 rule-providers、proxy-providers 风格的规则集输出）
+- [ ] mihomo 导出器（含 rule-providers 风格的规则集输出；proxy-providers 依赖输出链接，放到 M4）
 - [ ] 流水线操作（第 4 节全部）
 - [ ] 预设模板 2 套（极简、常用分流）
 - [ ] golden 测试，CI 中执行 `mihomo -t`
-- [ ] 有测试后去掉各包 `test` 脚本中的 `--passWithNoTests`
+- [ ] 有测试后去掉各包 `test` 脚本中的 `--passWithNoTests`（还没有测试的包不声明 `test` 脚本，加测试时再加回）
 - **验收**：样例订阅导入后经流水线处理，导出的配置能通过 `mihomo -t`
 
 ### M2 core：Surge 与兼容性警告
@@ -465,6 +497,7 @@ GET /sub/:token
 - [ ] outputs 增删改查、rotate
 - [ ] `/sub/:token`：UA 识别、缓存与 stale-while-revalidate、全部响应头、Surge MANAGED-CONFIG
 - [ ] backup / restore、`/api/meta`、`/healthz`
+- [ ] mihomo 导出器支持以 `proxy-providers` 引用托管的节点列表（M1 推迟至此）
 - **验收**：mihomo 客户端和 Surge 能通过输出链接导入配置，并显示流量信息
 
 ### M5 Workers 入口
@@ -504,6 +537,7 @@ GET /sub/:token
 - 备份到 Gist / WebDAV
 - sing-box、Quantumult X 导出器
 - 本地纯前端模式
+- 支持 Shadowrocket 格式的 vmess 链接（`vmess://base64(cipher:uuid@host:port)?params`，非 v2rayN JSON）
 - core 打包为可在 Surge/Loon 脚本环境中运行的版本
 
 ---
@@ -514,4 +548,4 @@ GET /sub/:token
 - [ ] 确认 GitHub 组织/用户名、npm 组织 `subloom` 可注册
 - [ ] 官方前端域名（如 subloom.app / subloom.dev）
 - [ ] 许可证：AGPL-3.0（防止闭源商用）或 MIT（传播更广）
-- [ ] 预设模板默认引用哪些社区规则仓库（引用 URL 即可，不复制内容）
+- [x] 预设模板默认引用哪些社区规则仓库：blackmatrix7/ios_rule_script（引用 URL 即可，不复制内容）

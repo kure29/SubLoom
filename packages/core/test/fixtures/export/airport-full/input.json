@@ -1,0 +1,5 @@
+{
+  "description": "典型机场下发的完整 mihomo 配置，原样导入后再导出（往返）",
+  "subscription": "mihomo-airport-full",
+  "importConfig": true
+}

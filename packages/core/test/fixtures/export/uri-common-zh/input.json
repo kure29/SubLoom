@@ -1,0 +1,10 @@
+{
+  "description": "验收用例：URI 订阅 → 流水线（去掉信息节点、按地区排序、按服务器去重）→ 常用分流模板（中文）→ mihomo",
+  "subscription": "uri-mixed",
+  "template": { "id": "common", "locale": "zh-CN" },
+  "pipeline": [
+    { "op": "filter-regex", "pattern": "剩余流量|套餐到期", "mode": "drop" },
+    { "op": "sort", "by": "region", "order": "asc" },
+    { "op": "dedupe", "by": "server" }
+  ]
+}

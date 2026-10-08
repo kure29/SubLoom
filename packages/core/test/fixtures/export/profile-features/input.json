@@ -1,0 +1,157 @@
+{
+  "description": "手写 profile：general/dns/extra 全部字段、手动节点、四种策略组、全部规则类型（含 src、no-resolve、嵌套逻辑规则）、三种规则集格式",
+  "profile": {
+    "version": 1,
+    "name": "features",
+    "general": {
+      "port": 7891,
+      "socksPort": 7892,
+      "redirPort": 7893,
+      "tproxyPort": 7894,
+      "mixedPort": 7890,
+      "allowLan": true,
+      "bindAddress": "*",
+      "mode": "rule",
+      "logLevel": "warning",
+      "ipv6": true,
+      "extra": { "mihomo": { "unified-delay": true, "tcp-concurrent": true } }
+    },
+    "dns": {
+      "enable": true,
+      "ipv6": true,
+      "listen": "0.0.0.0:1053",
+      "enhancedMode": "fake-ip",
+      "fakeIpRange": "198.18.0.1/16",
+      "defaultNameserver": ["223.5.5.5"],
+      "nameserver": ["https://dns.example.com/dns-query"],
+      "fallback": ["tls://dns.example.net:853"],
+      "extra": { "mihomo": { "fake-ip-filter": ["*.lan", "+.local"] } }
+    },
+    "proxies": [
+      { "name": "Home SOCKS", "type": "socks5", "server": "198.51.100.50", "port": 1080, "username": "fake-user", "password": "fake-pass" },
+      { "name": "Office HTTP", "type": "http", "server": "http.example.com", "port": 443, "udp": false, "password": "fake-pass", "tls": { "sni": "http.example.com", "skipCertVerify": true } }
+    ],
+    "groups": [
+      {
+        "name": "Proxy",
+        "type": "select",
+        "members": [
+          { "kind": "group", "name": "Auto" },
+          { "kind": "group", "name": "Fallback" },
+          { "kind": "group", "name": "Balance" },
+          { "kind": "proxy", "name": "Home SOCKS" },
+          { "kind": "builtin", "name": "DIRECT" }
+        ],
+        "includeAllProxies": true,
+        "icon": "https://icon.example.com/proxy.png"
+      },
+      {
+        "name": "Auto",
+        "type": "url-test",
+        "members": [],
+        "includeAllProxies": true,
+        "filter": { "include": "(?i)wg|tuic", "exclude": "Office" },
+        "testUrl": "https://cp.example.com/generate_204",
+        "interval": 300,
+        "tolerance": 50,
+        "extra": { "mihomo": { "lazy": true, "timeout": 2000 } }
+      },
+      {
+        "name": "Fallback",
+        "type": "fallback",
+        "members": [
+          { "kind": "proxy", "name": "WG" },
+          { "kind": "proxy", "name": "TUIC" }
+        ],
+        "testUrl": "https://cp.example.com/generate_204",
+        "interval": 600,
+        "hidden": true
+      },
+      {
+        "name": "Balance",
+        "type": "load-balance",
+        "members": [
+          { "kind": "proxy", "name": "WG" },
+          { "kind": "proxy", "name": "AnyTLS" },
+          { "kind": "proxy", "name": "VMess HTTP" }
+        ],
+        "extra": { "mihomo": { "strategy": "consistent-hashing" } }
+      },
+      {
+        "name": "Block",
+        "type": "select",
+        "members": [
+          { "kind": "builtin", "name": "REJECT" },
+          { "kind": "builtin", "name": "REJECT-DROP" },
+          { "kind": "builtin", "name": "DIRECT" }
+        ]
+      }
+    ],
+    "ruleSets": [
+      {
+        "id": "ads",
+        "name": "Ads",
+        "behavior": "domain",
+        "sources": {
+          "mihomo": { "url": "https://rules.example.com/ads.yaml", "format": "yaml" },
+          "surge": { "url": "https://rules.example.com/ads.list", "format": "list" }
+        },
+        "interval": 86400
+      },
+      {
+        "id": "cn-ip",
+        "name": "CN IP",
+        "behavior": "ipcidr",
+        "sources": { "mihomo": { "url": "https://rules.example.com/cn.mrs", "format": "mrs" } }
+      },
+      {
+        "id": "apps",
+        "name": "Apps",
+        "behavior": "classical",
+        "sources": { "mihomo": { "url": "https://rules.example.com/apps.list", "format": "text" } },
+        "extra": { "mihomo": { "path": "./ruleset/apps.list", "proxy": "DIRECT" } }
+      }
+    ],
+    "rules": [
+      { "type": "RULE-SET", "value": "ads", "target": "Block" },
+      { "type": "DOMAIN", "value": "direct.example.com", "target": "DIRECT" },
+      { "type": "DOMAIN-SUFFIX", "value": "example.org", "target": "Proxy" },
+      { "type": "DOMAIN-KEYWORD", "value": "tracker", "target": "REJECT" },
+      { "type": "DOMAIN-REGEX", "value": "^api\\d+\\.example\\.net$", "target": "Auto" },
+      { "type": "GEOSITE", "value": "category-ads-all", "target": "REJECT-DROP" },
+      { "type": "IP-CIDR", "value": "192.168.0.0/16", "noResolve": true, "target": "DIRECT" },
+      { "type": "IP-CIDR", "value": "192.168.50.0/24", "src": true, "target": "Home SOCKS" },
+      { "type": "IP-CIDR6", "value": "fd00::/8", "src": true, "noResolve": true, "target": "DIRECT" },
+      { "type": "SRC-IP-CIDR", "value": "10.10.0.0/16", "target": "Fallback" },
+      { "type": "IP-ASN", "value": "64500", "src": true, "target": "DIRECT" },
+      { "type": "PROCESS-NAME", "value": "curl", "target": "Office HTTP" },
+      { "type": "DST-PORT", "value": "22", "target": "DIRECT" },
+      {
+        "type": "OR",
+        "children": [
+          { "type": "NOT", "children": [{ "type": "DOMAIN-SUFFIX", "value": "example.com" }] },
+          {
+            "type": "AND",
+            "children": [
+              { "type": "RULE-SET", "value": "cn-ip", "src": true },
+              { "type": "DST-PORT", "value": "443" }
+            ]
+          }
+        ],
+        "target": "Balance"
+      },
+      { "type": "RULE-SET", "value": "apps", "target": "Proxy" },
+      { "type": "RULE-SET", "value": "cn-ip", "noResolve": true, "target": "DIRECT" },
+      { "type": "GEOIP", "value": "CN", "target": "DIRECT" },
+      { "type": "MATCH", "target": "Proxy" }
+    ],
+    "extra": { "mihomo": { "find-process-mode": "strict", "profile": { "store-selected": true } } }
+  },
+  "nodes": [
+    { "name": "WG", "type": "wireguard", "server": "198.51.100.51", "port": 51820, "udp": true, "privateKey": "ZmFrZS1wcml2YXRl", "publicKey": "ZmFrZS1wdWJsaWM=", "preSharedKey": "ZmFrZS1wc2s=", "ip": "10.0.0.2", "ipv6": "fd00::2", "reserved": [1, 2, 3], "mtu": 1280, "extra": { "mihomo": { "allowed-ips": ["0.0.0.0/0", "::/0"] } } },
+    { "name": "TUIC", "type": "tuic", "server": "tuic.example.com", "port": 443, "uuid": "00000000-0000-4000-8000-000000000051", "password": "fake-tuic", "congestionController": "bbr", "udpRelayMode": "native", "reduceRtt": true, "tls": { "sni": "tuic.example.com", "alpn": ["h3"] } },
+    { "name": "AnyTLS", "type": "anytls", "server": "anytls.example.com", "port": 443, "tfo": true, "password": "fake-anytls", "tls": { "clientFingerprint": "chrome" }, "extra": { "mihomo": { "idle-session-check-interval": 30 } } },
+    { "name": "VMess HTTP", "type": "vmess", "server": "198.51.100.52", "port": 80, "uuid": "00000000-0000-4000-8000-000000000052", "alterId": 0, "cipher": "auto", "transport": { "type": "http", "method": "GET", "path": ["/", "/video"], "host": ["a.example.com"], "headers": { "Connection": ["keep-alive"] } } },
+    { "name": "SSR", "type": "ssr", "server": "ssr.example.com", "port": 443, "cipher": "chacha20-ietf", "password": "fake-ssr", "obfs": "http_simple", "obfsParam": "o.example.com", "protocol": "auth_aes128_sha1", "protocolParam": "100:fake" }
+  ]
+}

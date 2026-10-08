@@ -1,0 +1,54 @@
+{
+  "description": "需要清理的 profile：节点重名（含与组名、内置目标重名）、其他格式的 extra、悬空的组成员和规则目标、重名的组、空组、不可用的规则集；defaultUdp 关闭",
+  "profile": {
+    "version": 1,
+    "name": "cleanup",
+    "proxies": [
+      { "name": "Shared", "type": "trojan", "server": "manual.example.com", "port": 443, "password": "fake-manual", "tls": {} },
+      { "name": "Proxy", "type": "ss", "server": "clash.example.com", "port": 8388, "cipher": "aes-128-gcm", "password": "fake-clash" }
+    ],
+    "groups": [
+      {
+        "name": "Proxy",
+        "type": "select",
+        "members": [
+          { "kind": "proxy", "name": "Shared" },
+          { "kind": "proxy", "name": "Proxy" },
+          { "kind": "proxy", "name": "Gone" },
+          { "kind": "group", "name": "Missing group" },
+          { "kind": "group", "name": "Empty" },
+          { "kind": "group", "name": "Provider" }
+        ]
+      },
+      { "name": "Proxy", "type": "url-test", "members": [{ "kind": "builtin", "name": "DIRECT" }] },
+      { "name": "Empty", "type": "fallback", "members": [{ "kind": "proxy", "name": "Gone" }] },
+      { "name": "Provider", "type": "select", "members": [], "extra": { "mihomo": { "use": ["provider1"] } } }
+    ],
+    "ruleSets": [
+      { "id": "surge-only", "name": "Surge only", "behavior": "domain", "sources": { "surge": { "url": "https://rules.example.com/a.list", "format": "list" } } },
+      { "id": "list-format", "name": "List", "behavior": "domain", "sources": { "mihomo": { "url": "https://rules.example.com/b.list", "format": "list" } } },
+      { "id": "classical-mrs", "name": "Classical mrs", "behavior": "classical", "sources": { "mihomo": { "url": "https://rules.example.com/c.mrs", "format": "mrs" } } },
+      { "id": "ok", "name": "OK", "behavior": "domain", "sources": { "mihomo": { "url": "https://rules.example.com/ok.yaml", "format": "yaml" } } }
+    ],
+    "rules": [
+      { "type": "RULE-SET", "value": "surge-only", "target": "Proxy" },
+      { "type": "AND", "children": [{ "type": "RULE-SET", "value": "list-format" }, { "type": "DST-PORT", "value": "443" }], "target": "Proxy" },
+      { "type": "RULE-SET", "value": "classical-mrs", "target": "Proxy" },
+      { "type": "RULE-SET", "value": "not-defined", "target": "Proxy" },
+      { "type": "RULE-SET", "value": "ok", "target": "Proxy" },
+      { "type": "DOMAIN", "value": "a.example.com", "target": "No such group" },
+      { "type": "DOMAIN", "value": "b.example.com", "target": "Shared" },
+      { "type": "DOMAIN", "value": "c.example.com", "target": "Empty" },
+      { "type": "MATCH", "target": "Proxy" }
+    ],
+    "extra": { "mihomo": { "proxy-providers": { "provider1": { "type": "http", "url": "https://sub.example.com/provider.yaml", "interval": 3600 } } } }
+  },
+  "nodes": [
+    { "name": "Shared", "type": "ss", "server": "sub1.example.com", "port": 8388, "cipher": "aes-128-gcm", "password": "fake-sub1" },
+    { "name": "Shared", "type": "ss", "server": "sub2.example.com", "port": 8388, "udp": true, "cipher": "aes-128-gcm", "password": "fake-sub2" },
+    { "name": "DIRECT", "type": "ss", "server": "sub3.example.com", "port": 8388, "cipher": "aes-128-gcm", "password": "fake-sub3" },
+    { "name": "URI extra", "type": "hysteria2", "server": "hy.example.com", "port": 443, "password": "fake-hy", "tls": { "sni": "hy.example.com" }, "extra": { "uri": { "pinSHA256": "AA:BB" } } },
+    { "name": "Surge extra", "type": "trojan", "server": "t.example.com", "port": 443, "password": "fake-t", "tls": {}, "extra": { "surge": { "shadow-tls-version": 3 }, "mihomo": { "ip-version": "ipv4" } } }
+  ],
+  "options": { "defaultUdp": false }
+}

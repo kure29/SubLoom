@@ -25,7 +25,7 @@ function one(proxyYaml: string): AnyProxy {
 }
 
 describe('proxies', () => {
-  it('maps ss with udp/tfo and drops false booleans', () => {
+  it('maps ss with udp/tfo, keeps udp: false and drops other false booleans', () => {
     expect(
       one(
         '{ name: s, type: ss, server: s.example.com, port: "8388", cipher: aes-128-gcm, password: p, udp: false, tfo: true }',
@@ -35,10 +35,22 @@ describe('proxies', () => {
       type: 'ss',
       server: 's.example.com',
       port: 8388,
+      udp: false,
       tfo: true,
       cipher: 'aes-128-gcm',
       password: 'p',
     })
+  })
+
+  it('records the mihomo UDP default when udp is missing', () => {
+    const base = 'server: x.example.com, port: 443, password: p'
+    expect(one(`{ name: s, type: trojan, ${base} }`).udp).toBe(false)
+    // mihomo 对 hysteria2、tuic 总是开启 UDP
+    expect(one(`{ name: h, type: hysteria2, ${base} }`).udp).toBe(true)
+    expect(one(`{ name: t, type: tuic, ${base}, uuid: u }`).udp).toBe(true)
+    // 显式写出的值原样保留
+    expect(one(`{ name: h, type: hysteria2, ${base}, udp: false }`).udp).toBe(false)
+    expect(one(`{ name: s, type: trojan, ${base}, udp: true }`).udp).toBe(true)
   })
 
   it('converts numeric names to strings', () => {
@@ -90,6 +102,7 @@ describe('proxies', () => {
       type: 'ssr',
       server: 'r.example.com',
       port: 443,
+      udp: false,
       cipher: 'aes-256-cfb',
       password: 'p',
       obfs: 'tls1.2_ticket_auth',
@@ -160,6 +173,7 @@ describe('proxies', () => {
       type: 'vless',
       server: 'v.example.com',
       port: 443,
+      udp: false,
       uuid: 'u',
       tls: {
         sni: 's.example.com',
@@ -205,6 +219,7 @@ describe('proxies', () => {
       type: 'hysteria2',
       server: 'h.example.com',
       port: 443,
+      udp: true,
       password: 'p',
       ports: '443,20000-30000',
       obfs: { type: 'salamander', password: 'o' },
@@ -224,6 +239,7 @@ describe('proxies', () => {
       type: 'tuic',
       server: 't.example.com',
       port: 443,
+      udp: true,
       uuid: 'u',
       password: 'p',
       congestionController: 'bbr',
@@ -266,6 +282,7 @@ describe('proxies', () => {
       type: 'anytls',
       server: 'a.example.com',
       port: 443,
+      udp: false,
       password: 'p',
       tls: {},
       extra: { mihomo: { 'idle-session-timeout': 30 } },
@@ -279,6 +296,7 @@ describe('proxies', () => {
       type: 'http',
       server: 'h.example.com',
       port: 443,
+      udp: false,
       username: 'u',
       password: 'p',
       tls: { sni: 's.example.com' },
@@ -443,6 +461,33 @@ describe('rules', () => {
     ])
   })
 
+  it('keeps the src parameter on rule types that support it', () => {
+    const r = rules([
+      'IP-CIDR,10.0.0.0/8,DIRECT,src',
+      'IP-CIDR6,fd00::/8,DIRECT,no-resolve,src',
+      'GEOIP,CN,DIRECT,src',
+      'IP-ASN,64500,DIRECT,src',
+      'RULE-SET,lan,DIRECT,src',
+      'AND,((IP-CIDR,10.0.0.0/8,src),(DST-PORT,22)),REJECT',
+    ])
+    expect(r.rules).toEqual([
+      { type: 'IP-CIDR', value: '10.0.0.0/8', src: true, target: 'DIRECT' },
+      { type: 'IP-CIDR6', value: 'fd00::/8', noResolve: true, src: true, target: 'DIRECT' },
+      { type: 'GEOIP', value: 'CN', src: true, target: 'DIRECT' },
+      { type: 'IP-ASN', value: '64500', src: true, target: 'DIRECT' },
+      { type: 'RULE-SET', value: 'lan', src: true, target: 'DIRECT' },
+      {
+        type: 'AND',
+        children: [
+          { type: 'IP-CIDR', value: '10.0.0.0/8', src: true },
+          { type: 'DST-PORT', value: '22' },
+        ],
+        target: 'REJECT',
+      },
+    ])
+    expect(r.warnings).toEqual([])
+  })
+
   it('maps other supported rule types', () => {
     expect(
       rules([
@@ -465,11 +510,11 @@ describe('rules', () => {
       'DOMAIN,missing-target.example.com',
       'AND,((DOMAIN,a.example.com),DIRECT',
       'MATCH',
-      'IP-CIDR,1.0.0.0/8,DIRECT,src',
+      'DOMAIN,a.example.com,DIRECT,src',
     ])
     expect(r.rules).toEqual([
       { type: 'DOMAIN', value: 'ok.example.com', target: 'DIRECT' },
-      { type: 'IP-CIDR', value: '1.0.0.0/8', target: 'DIRECT' },
+      { type: 'DOMAIN', value: 'a.example.com', target: 'DIRECT' },
     ])
     expect(r.warnings.map((w) => [w.level, w.code, w.path])).toEqual([
       ['warn', 'UNSUPPORTED_RULE_TYPE', 'rules[1]'],

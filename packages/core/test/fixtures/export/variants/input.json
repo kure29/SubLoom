@@ -1,0 +1,5 @@
+{
+  "description": "mihomo-variants：全部 11 种协议、各种传输层、extra、需要加引号的标量；悬空的策略组成员被清理",
+  "subscription": "mihomo-variants",
+  "importConfig": true
+}

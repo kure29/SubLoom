@@ -1,0 +1,11 @@
+{
+  "description": "Base64 订阅 → 流水线（按地区保留、改名、加前缀）→ 极简模板（英文），defaultUdp 关闭",
+  "subscription": "uri-mixed-b64",
+  "template": { "id": "minimal", "locale": "en" },
+  "pipeline": [
+    { "op": "filter-region", "regions": ["HK", "JP", "US"], "mode": "keep" },
+    { "op": "rename-regex", "pattern": " \\| .*$", "replace": "" },
+    { "op": "prefix", "text": "[Demo] " }
+  ],
+  "options": { "defaultUdp": false }
+}
