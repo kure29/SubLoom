@@ -18,12 +18,13 @@
     "bench": "vitest bench --run"
   },
   "dependencies": {
-    "yaml": "catalog:",
+    "js-yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "catalog:"
   }
 }

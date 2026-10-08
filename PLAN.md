@@ -39,7 +39,7 @@
 | 代码规范 | Biome | lint + format |
 | 测试 | Vitest | core 用 golden 文件测试；Workers 用 `@cloudflare/vitest-pool-workers` |
 | 校验/模型 | zod | IR schema 即校验 |
-| YAML | `yaml` | 支持保留注释，可在 Workers 运行 |
+| YAML | 解析：`js-yaml`；生成：自写的字符串生成器 | 导入/导出是生成配置的热路径，通用 `yaml` 库在 500 节点时解析约 70ms、生成约 40ms（见 5.6）。需要保留注释的场景（如以后反解析、编辑用户的原始配置）再用 `yaml` 库；目前 `yaml` 只用于测试 |
 | 后端框架 | Hono | 同时运行于 Node 和 Workers |
 | ORM | Drizzle（sqlite-core） | Docker 用 better-sqlite3，Workers 用 D1，共用 schema |
 | Node 运行时 | Node 24 LTS（`@hono/node-server`） | Docker 镜像 |
@@ -422,7 +422,7 @@ GET /sub/:token
 | 限制 | 对策 |
 |---|---|
 | 免费版单次请求 CPU 时间很短（约 10ms） | 生成结果缓存 + stale-while-revalidate；M2 里做性能基准测试（500 个节点），超限时在文档中说明可升级付费计划或改用 Docker |
-| 500 节点完整链路（解析 mihomo YAML → 流水线 → 导出）约 120ms（开发机 Node 22，其中 `yaml` 库的解析约 70ms、生成约 30ms），远超免费版 CPU 限制 | 同上：依靠缓存，`/sub/:token` 绝大多数请求不触发生成；文档中说明免费版在缓存未命中时可能超限 |
+| 500 节点完整链路（解析 mihomo YAML → 流水线 → 导出）CPU 耗时 | M2 中优化：导入改用 `js-yaml`、导出改用自写的 YAML 生成器，开发机（Node 22）上从约 120ms 降到约 20ms（导入约 12ms，其中 js-yaml 约 6.5ms；导出约 6ms）。M5 在真实 Workers 环境中再测一次 |
 | 不支持 eval | 自定义脚本功能仅 Docker 提供，前端根据 `/api/meta` 的平台信息隐藏 |
 | 出口 IP 属于 Cloudflare，部分机场会拦截 | 文档说明，建议此类用户使用 Docker |
 | D1 有单行大小限制 | 大内容放 KV |
@@ -529,6 +529,7 @@ GET /sub/:token
 - [ ] `apps/worker`：D1、KV BlobStore、Cron Triggers、waitUntil
 - [ ] wrangler 配置、静态资源托管、自动迁移
 - [ ] API 集成测试在 Workers 环境下全部通过
+- [ ] 在真实的 Workers 环境（非本地 workerd 模拟）中重测 500 节点完整链路的 CPU 耗时（本地 Node 的数字不能完全代表 Workers），结果写入 5.6；超出免费版限制时在部署文档中说明
 - [ ] Deploy 按钮与部署文档
 - **验收**：Fork 后可一键部署到 Cloudflare，功能与 Node 版一致
 
