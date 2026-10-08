@@ -280,6 +280,8 @@ interface Exporter {
 
 能力以 [Surge 官方手册](https://manual.nssurge.com/)为准，能力矩阵的代码注释中注明出处页面。Surge 没有命令行校验工具，golden 快照逐个人工核对。
 
+已在 Surge iOS 上实测（PR #4）：不加方括号的 IPv6 服务器地址、以 `[` 开头的节点名、`salamander-password`、引号内的 `\\` 与 `\"` 转义均可正常导入；HTTPS 的 `proxy-test-url` 在该版本上报错，因此改写为 HTTP（见下）。
+
 - **输出结构**：`[General]` → `[Proxy]` → `[Proxy Group]` → `[Rule]` → `[WireGuard <名称>]` 段 → `profile.extra.surge` 中的附加段。`#!MANAGED-CONFIG` 首行由 M4 的 `/sub/:token` 添加。
 - **名称**：Surge 的策略名不能加引号，出现在 `名称 = …`、逗号分隔的组成员和规则中。节点名和组名中的 `,`、`=` 替换为全角的 `，`、`＝`；空白后的行内注释符（` #`、` //`、` ;`）中的 `#`、`/`、`;` 替换为全角字符。替换在名称冲突处理之前进行（`resolveProfile` 的 `sanitizeName`），引用同步更新，给出 `INVALID_NAME_CHARS`（kept）。
 - **参数值**：含逗号、引号、首尾空白或行内注释符的值用双引号包裹，`"` 和 `\` 转义为 `\"`、`\\`。
@@ -288,18 +290,19 @@ interface Exporter {
   - ss：`encrypt-method` 必须在手册列出的加密方式中，否则移除节点；obfs 插件映射为 `obfs`、`obfs-host`；v2ray-plugin 移除节点。
   - vmess：`username` = uuid；`alterId` 为 0 时 `vmess-aead=true`；加密方式 `auto`/`aes-128-gcm` 用 Surge 默认值，`chacha20-poly1305` 映射为 `chacha20-ietf-poly1305`，其余（VMess 的加密方式由客户端决定，服务端都接受）改用默认值并警告（downgraded）。
   - 传输层（vmess、trojan）：只支持 ws（`ws=true`、`ws-path`、`ws-headers=Host:…|K:V`），early data 字段去掉并警告；其他传输层、或请求头中含 `|` 时移除节点。
-  - hysteria2：`ports` → `port-hopping`（分隔符改为 `;`）；`down` → `download-bandwidth`（Mbps）；`up` 去掉并警告；salamander → `salamander-password`，手册只列出 Surge Mac 支持，给 info 提示（kept）。没有密码时移除节点。
+  - hysteria2：`ports` → `port-hopping`（分隔符改为 `;`）；`down` → `download-bandwidth`（Mbps）；`up` 去掉并警告；salamander → `salamander-password`（手册只标了 Mac 6.4.3+，已在 iOS 上实测可用，不再警告）。没有密码时移除节点。
   - tuic：`uuid`、`password`；`congestionController`、`udpRelayMode`、`reduceRtt` 没有对应参数，去掉并警告。
   - wireguard：`名称 = wireguard, section-name=<段名>` 加 `[WireGuard <段名>]` 段（段名为 `wg1`、`wg2`……）。`allowed-ips` 按 mihomo 默认值生成（有 `ip` 时 `0.0.0.0/0`，有 `ipv6` 时 `::/0`）；`reserved` → `client-id`。Surge 中没有 `dns-server` 的 WireGuard 策略不能解析目标域名，因此 `dns-server` 取 `extra.mihomo.dns` 中的 IP 地址，没有时移除节点。
   - TLS：`sni`、`alpn`、`skip-cert-verify`；证书指纹 → `server-cert-fingerprint-sha256`（64 位十六进制，可带冒号），格式不符时移除节点；reality 移除节点；uTLS 指纹、ECH 去掉并警告。
   - UDP：ss、socks5 按 `udp ?? defaultUdp` 输出 `udp-relay=true`；vmess、trojan、hysteria2、tuic、anytls、wireguard 总是支持 UDP，没有对应开关；http 不支持 UDP。`tfo` → `tfo=true`。
   - `extra.surge` 作为额外参数追加在行尾（IR 字段优先）。
 - **策略组**（`[Proxy Group]`）：四种类型都支持。`includeAllProxies` → `include-all-proxies=true`；`filter` → `policy-regex-filter`，Surge 没有排除过滤，有 `exclude` 时合并为 `^(?=.*(?:include))(?!.*(?:exclude))` 并给 info（`(?i)` 开头的写成 `(?i:…)`）。`interval` 只用于 url-test、fallback、load-balance，`tolerance` 只用于 url-test，其他组上的去掉并警告。`hidden` → `hidden=true`，`icon` → `icon-url`。
-  - Surge 没有组级测速地址：所有组的 `testUrl` 相同时写入 `[General]` 的 `proxy-test-url`；不同时取第一个，其余组给出 downgraded 警告。`general.extra.surge` 中写了 `proxy-test-url` 时以它为准。
+  - Surge 没有组级测速地址：所有组的 `testUrl` 相同时写入 `[General]` 的 `proxy-test-url`；不同时取第一个，其余组给出 downgraded 警告。`general.extra.surge` 中写了 `proxy-test-url`（键名不区分大小写）时以它为准。
+  - **测速地址只用 HTTP**：HTTPS 测速地址需要 Surge iOS 5.23.0+ / Mac 6.10.0+（profile/general.md 的 `proxy-test-url`、policies/parameters.md 的 `test-url`），低版本会报"存在无效配置"（已在手机上复现）。导出时把 `proxy-test-url`、`internet-test-url` 和节点的 `test-url`（来自组的 `testUrl` 或 `extra.surge`）中的 `https://` 改为 `http://`，给 info 级的 `TEST_URL_REWRITTEN`（downgraded）。只影响 Surge，模板和 mihomo 不变。
 - **规则**：`DST-PORT` → `DEST-PORT`，`SRC-IP-CIDR` → `SRC-IP`，`MATCH` → `FINAL`；`DOMAIN-REGEX`、`GEOSITE` 不支持。带 `src` 的 `IP-CIDR`、`IP-CIDR6` 转为 `SRC-IP`；`GEOIP`、`IP-ASN`、`RULE-SET` 带 `src` 时无法表达，移除整条规则。`no-resolve` 只写在 IP 类规则和规则集上。含逗号的值加引号。
   - Surge 要求规则以 `FINAL` 结尾，且多个 `FINAL` 时最后一个生效：导出到第一条 `MATCH` 为止，其后的规则移除并给 info（`UNREACHABLE_RULE`）；没有 `MATCH` 时补 `FINAL,DIRECT` 并警告（`MISSING_FINAL_RULE`）。
 - **规则集**：`sources.surge` 的格式为 `list` 时输出 `RULE-SET,<url>,<策略>`（规则列表，任意 behavior）；格式为 `text` 且 behavior 为 `domain` 时输出 `DOMAIN-SET,<url>,<策略>`；其余不可用并警告。`interval` → `update-interval`。Surge 的 RULE-SET 没有指定下载策略的参数，能力矩阵中 `ruleSetProxy: false`。
-- **General / DNS**：`logLevel` → `loglevel`（debug → verbose、info → info、warning 和 error → warning、silent → warning 并警告）；`ipv6` → `ipv6`（未设置时取 `dns.ipv6`）。`dns.nameserver` 中的 IP 地址、`udp://`、`tcp://` 和 `system`，以及 `defaultNameserver` → `dns-server`；`https://`、`tls://`、`quic://`、`h3://` → `encrypted-dns-server`；其他写法（主机名、`dhcp://`、带 `#` 参数的）去掉并警告（`UNSUPPORTED_DNS_SERVER`）。端口、`allowLan`、`bindAddress`、`mode` 以及 DNS 的 `enable`、`listen`、`enhancedMode`、`fakeIpRange`、`fallback` 在 Surge 中没有对应项或与平台有关，去掉并警告（`UNSUPPORTED_SETTING`）。`general.extra.surge` 追加为 `[General]` 中的 `键 = 值`。
+- **General / DNS**：`logLevel` → `loglevel`（debug → verbose、info → info、warning 和 error → warning、silent → warning 并警告）；`ipv6` → `ipv6`（未设置时取 `dns.ipv6`）。`dns.nameserver` 中的 IP 地址、`udp://`、`tcp://` 和 `system`，以及 `defaultNameserver` → `dns-server`；`https://`、`tls://`、`quic://`、`h3://` → `encrypted-dns-server`；其他写法（主机名、`dhcp://`、带 `#` 参数的）去掉并警告（`UNSUPPORTED_DNS_SERVER`）。端口、`allowLan`、`bindAddress`、`mode` 以及 DNS 的 `enable`、`listen`、`enhancedMode`、`fakeIpRange`、`fallback` 在 Surge 中没有对应项或与平台有关，去掉并警告（`UNSUPPORTED_SETTING`）。`general.extra.surge`（及 `dns.extra.surge`）追加为 `[General]` 中的 `键 = 值`。Surge 的 General 键不区分大小写（profile/general.md），与已生成的键（`loglevel`、`ipv6`、`dns-server`、`encrypted-dns-server`）或彼此同名（忽略大小写）的键只保留一个：生成的键优先，重复的 extra 键去掉并给出 `EXTRA_IGNORED`；`proxy-test-url` 例外，见上。
 - **profile.extra.surge**：`{ 段名: 行[] }`，作为附加段原样输出（如 `MITM`、`Host`）；与生成的段同名或格式不对时忽略并警告。
 
 ### 节点处理流水线

@@ -30,6 +30,13 @@
       "code": "RULE_SET_PROXY_UNSUPPORTED",
       "message": "Surge cannot download rule sets through a policy group; use a rule set mirror if the original URLs are not reachable directly",
       "action": "dropped"
+    },
+    {
+      "level": "info",
+      "path": "groups[1].testUrl",
+      "code": "TEST_URL_REWRITTEN",
+      "message": "HTTPS test URLs need Surge iOS 5.23.0+ / Mac 6.10.0+; the HTTP URL is used instead",
+      "action": "downgraded"
     }
   ]
 }

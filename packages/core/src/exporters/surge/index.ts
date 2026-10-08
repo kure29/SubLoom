@@ -235,14 +235,7 @@ function adaptProxy(node: ProxyNode, warn: ProxyWarn): AdaptedProxy | undefined 
       warn('down', 'downgraded', 'the bandwidth cannot be converted to Mbps')
       out = without(out, 'down')
     }
-    if (out.obfs) {
-      warn(
-        'obfs',
-        'kept',
-        'the Surge manual lists Salamander obfuscation for Surge Mac only',
-        'info',
-      )
-    }
+    // salamander-password：手册只标了 Mac 6.4.3+，已在 Surge iOS 上实测可用
   }
   if (out.type === 'tuic') {
     for (const key of ['congestionController', 'udpRelayMode', 'reduceRtt'] as const) {
@@ -328,22 +321,56 @@ function wsParams(node: ProxyNode): string[] {
   ]
 }
 
-/** extra.surge 追加在行尾：已有的参数（IR 字段）优先；true 写成 key=true */
-function extraParams(extra: Record<string, unknown> | undefined, written: string[]): string[] {
+/** 测速地址参数（profile/general.md、policies/parameters.md），键名不区分大小写 */
+const TEST_URL_KEYS: ReadonlySet<string> = new Set([
+  'proxy-test-url',
+  'internet-test-url',
+  'test-url',
+])
+
+/**
+ * HTTPS 测速地址需要 Surge iOS 5.23.0+ / Mac 6.10.0+（profile/general.md 的 proxy-test-url、
+ * policies/parameters.md 的 test-url），低版本报"存在无效配置"，因此改用 HTTP。
+ */
+function httpTestUrl(url: string, path: string, ctx: ExportContext): string {
+  if (!/^https:\/\//i.test(url)) return url
+  ctx.warn(
+    'TEST_URL_REWRITTEN',
+    path,
+    'downgraded',
+    'HTTPS test URLs need Surge iOS 5.23.0+ / Mac 6.10.0+; the HTTP URL is used instead',
+    'info',
+  )
+  return `http://${url.slice('https://'.length)}`
+}
+
+/**
+ * extra.surge 追加在行尾：已有的参数（IR 字段）优先；true 写成 key=true。
+ * path 为 extra.surge 的位置，用于测速地址改写的警告。
+ */
+function extraParams(
+  extra: Record<string, unknown> | undefined,
+  written: string[],
+  ctx: ExportContext,
+  path: string,
+): string[] {
   if (!extra) return []
   const keys = new Set(written.map((w) => w.split('=')[0]))
   const out: string[] = []
   for (const [k, v] of Object.entries(extra)) {
-    const s = paramValue(v)
-    if (s !== undefined && !keys.has(k)) out.push(param(k, s))
+    let s = paramValue(v)
+    if (s === undefined || keys.has(k)) continue
+    if (TEST_URL_KEYS.has(k.toLowerCase())) s = httpTestUrl(s, `${path}.${k}`, ctx)
+    out.push(param(k, s))
   }
   return out
 }
 
 function proxyLine(
-  { node, name, extra }: ResolvedProxy,
+  { node, name, path, extra }: ResolvedProxy,
   defaultUdp: boolean,
   section: string | undefined,
+  ctx: ExportContext,
 ): string {
   const src = node as Record<string, unknown>
   const params: string[] = []
@@ -371,7 +398,7 @@ function proxyLine(
     if (UDP_RELAY_TYPES.has(node.type) && (node.udp ?? defaultUdp)) params.push('udp-relay=true')
   }
   if (node.tfo) params.push('tfo=true')
-  params.push(...extraParams(extra, params))
+  params.push(...extraParams(extra, params, ctx, `${path}.extra.surge`))
   const head =
     section !== undefined ? [surgeType(node)] : [surgeType(node), node.server, String(node.port)]
   return `${name} = ${[...head, ...params].join(', ')}`
@@ -461,7 +488,7 @@ function groupLine(group: ResolvedGroup, testUrl: string | undefined, ctx: Expor
   }
   if (g.hidden) params.push('hidden=true')
   if (g.icon !== undefined) params.push(param('icon-url', g.icon))
-  params.push(...extraParams(group.extra, params))
+  params.push(...extraParams(group.extra, params, ctx, `${group.path}.extra.surge`))
   return `${group.name} = ${[group.type, ...group.members, ...params].join(', ')}`
 }
 
@@ -470,10 +497,11 @@ function groupLine(group: ResolvedGroup, testUrl: string | undefined, ctx: Expor
 function ruleText(
   c: RuleCondition,
   sets: ReadonlyMap<string, ResolvedRuleSet>,
+  ctx: ExportContext,
   target?: string,
 ): string {
   if (LOGICAL_RULE_TYPES.has(c.type)) {
-    const children = (c.children ?? []).map((child) => `(${ruleText(child, sets)})`).join(',')
+    const children = (c.children ?? []).map((child) => `(${ruleText(child, sets, ctx)})`).join(',')
     return [c.type, `(${children})`, ...(target === undefined ? [] : [target])].join(',')
   }
   let type = RULE_TYPE_NAMES[c.type] ?? c.type
@@ -493,7 +521,7 @@ function ruleText(
   parts.push(target)
   if (c.noResolve && NO_RESOLVE_TYPES.has(type)) parts.push('no-resolve')
   if (set?.set.interval !== undefined) parts.push(`update-interval=${set.set.interval}`)
-  if (set) parts.push(...extraParams(set.extra, parts))
+  if (set) parts.push(...extraParams(set.extra, parts, ctx, `${set.path}.extra.surge`))
   return parts.join(',')
 }
 
@@ -512,7 +540,7 @@ function ruleLines(r: ResolvedProfile, ctx: ExportContext): string[] {
       )
       continue
     }
-    out.push(ruleText(rule, r.ruleSets, target))
+    out.push(ruleText(rule, r.ruleSets, ctx, target))
     if (rule.type === 'MATCH') final = true
   }
   if (!final) {
@@ -615,11 +643,38 @@ function generalLines(profile: Profile, ctx: ExportContext) {
   }
   if (plain.length) lines.push(`dns-server = ${plain.join(', ')}`)
   if (encrypted.length) lines.push(`encrypted-dns-server = ${encrypted.join(', ')}`)
-  // general.extra.surge 在前，dns.extra.surge 中的同名键忽略
-  const extra: Record<string, unknown> = { ...generalExtra }
-  for (const [k, v] of Object.entries(ctx.extra(dns.extra, 'dns') ?? {}))
-    if (!(k in extra)) extra[k] = v
-  return { lines, extra }
+
+  // General 的键不区分大小写（profile/general.md）：生成的键优先，extra 中重复的键忽略；
+  // general.extra.surge 在前，dns.extra.surge 在后。proxy-test-url 由 exportSurge 处理。
+  const seen = new Set(lines.map((l) => l.slice(0, l.indexOf(' = ')).toLowerCase()))
+  const extra: Array<{ key: string; value: string }> = []
+  let explicitTestUrl: string | undefined
+  const sources = [
+    ['general', generalExtra],
+    ['dns', ctx.extra(dns.extra, 'dns')],
+  ] as const
+  for (const [section, record] of sources) {
+    for (const [key, v] of Object.entries(record ?? {})) {
+      const path = `${section}.extra.surge.${key}`
+      const lower = key.toLowerCase()
+      let value = settingValue(v)
+      if (value === undefined) continue
+      if (seen.has(lower)) {
+        ctx.warn(
+          'EXTRA_IGNORED',
+          path,
+          'dropped',
+          'this [General] key is already written; Surge keys are case-insensitive',
+        )
+        continue
+      }
+      seen.add(lower)
+      if (TEST_URL_KEYS.has(lower)) value = httpTestUrl(value, path, ctx)
+      if (lower === 'proxy-test-url') explicitTestUrl = paramValue(v)
+      extra.push({ key, value })
+    }
+  }
+  return { lines, extra, explicitTestUrl }
 }
 
 /** general.extra.surge 的值：数组用 ", " 连接 */
@@ -676,22 +731,21 @@ export function exportSurge(
         wireguardSection(p.node, (p.data as WireguardData).dns),
       ])
     }
-    proxies.push(proxyLine(p, defaultUdp, section))
+    proxies.push(proxyLine(p, defaultUdp, section, ctx))
   }
 
   // Surge 没有组级测速地址（policy-groups/url-test.md）：用全局 proxy-test-url（profile/general.md）
-  const explicitTestUrl = paramValue(general.extra['proxy-test-url'])
-  const testUrl = explicitTestUrl ?? r.groups.find((g) => g.group.testUrl)?.group.testUrl
+  const explicitTestUrl = general.explicitTestUrl
+  const source = explicitTestUrl === undefined ? r.groups.find((g) => g.group.testUrl) : undefined
+  const testUrl = explicitTestUrl ?? source?.group.testUrl
   const groups = r.groups.map((g) => groupLine(g, testUrl, ctx))
   const rules = ruleLines(r, ctx)
 
-  if (testUrl !== undefined && explicitTestUrl === undefined) {
-    general.lines.push(`proxy-test-url = ${testUrl}`)
+  if (source?.group.testUrl !== undefined) {
+    const url = httpTestUrl(source.group.testUrl, `${source.path}.testUrl`, ctx)
+    general.lines.push(`proxy-test-url = ${url}`)
   }
-  for (const [k, v] of Object.entries(general.extra)) {
-    const s = settingValue(v)
-    if (s !== undefined) general.lines.push(`${k} = ${s}`)
-  }
+  for (const { key, value } of general.extra) general.lines.push(`${key} = ${value}`)
 
   const sections: Array<[string, string[]]> = [
     ['General', general.lines],

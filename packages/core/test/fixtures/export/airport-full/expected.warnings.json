@@ -45,13 +45,6 @@
       "action": "dropped"
     },
     {
-      "level": "info",
-      "path": "nodes[11].obfs",
-      "code": "UNSUPPORTED_PROXY_FEATURE",
-      "message": "the Surge manual lists Salamander obfuscation for Surge Mac only",
-      "action": "kept"
-    },
-    {
       "level": "warn",
       "path": "nodes[13].congestionController",
       "code": "UNSUPPORTED_PROXY_FEATURE",
@@ -141,6 +134,13 @@
       "code": "UNSUPPORTED_RULE_TYPE",
       "message": "Surge does not support GEOSITE rules",
       "action": "dropped"
+    },
+    {
+      "level": "info",
+      "path": "groups[1].testUrl",
+      "code": "TEST_URL_REWRITTEN",
+      "message": "HTTPS test URLs need Surge iOS 5.23.0+ / Mac 6.10.0+; the HTTP URL is used instead",
+      "action": "downgraded"
     }
   ]
 }

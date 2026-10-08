@@ -275,12 +275,11 @@ describe('proxies', () => {
     ])
     expect(warnings).toEqual([
       ['UNSUPPORTED_PROXY_FEATURE', 'nodes[0].up', 'downgraded'],
-      ['UNSUPPORTED_PROXY_FEATURE', 'nodes[0].obfs', 'kept'],
       ['UNSUPPORTED_PROXY_FEATURE', 'nodes[1].password', 'dropped'],
     ])
   })
 
-  it('notes salamander at info level', () => {
+  it('exports salamander without a warning (verified on Surge iOS)', () => {
     const r = exportSurge(profile({ rules: [{ type: 'MATCH', target: 'DIRECT' }] }), [
       node({
         name: 'h',
@@ -292,7 +291,8 @@ describe('proxies', () => {
         tls: {},
       }),
     ])
-    expect(r.warnings).toEqual([expect.objectContaining({ level: 'info', action: 'kept' })])
+    expect(r.text).toContain('salamander-password=o')
+    expect(r.warnings).toEqual([])
   })
 
   it('maps tuic as tuic-v5 and anytls', () => {
@@ -476,7 +476,7 @@ describe('groups', () => {
             members: [DIRECT],
             includeAllProxies: true,
             filter: { include: '(?i)hk' },
-            testUrl: 'https://cp.example.com/generate_204',
+            testUrl: 'http://cp.example.com/generate_204',
             interval: 300,
             tolerance: 50,
             hidden: true,
@@ -499,7 +499,7 @@ describe('groups', () => {
       'LB = load-balance, Auto, interval=600',
       'FB = fallback, Auto, DIRECT',
     ])
-    expect(sec.get('General')).toEqual(['proxy-test-url = https://cp.example.com/generate_204'])
+    expect(sec.get('General')).toEqual(['proxy-test-url = http://cp.example.com/generate_204'])
     expect(warnings).toEqual([])
   })
 
@@ -536,7 +536,7 @@ describe('groups', () => {
   })
 
   it('writes one global test URL and warns about the others', () => {
-    const url = (u: string) => `https://${u}.example.com/generate_204`
+    const url = (u: string) => `http://${u}.example.com/generate_204`
     const groups: Profile['groups'] = [
       { name: 'A', type: 'url-test', members: [DIRECT], testUrl: url('a') },
       { name: 'B', type: 'url-test', members: [DIRECT], testUrl: url('b') },
@@ -557,6 +557,70 @@ describe('groups', () => {
       ['UNSUPPORTED_GROUP_OPTION', 'groups[0].testUrl', 'downgraded'],
       ['UNSUPPORTED_GROUP_OPTION', 'groups[2].testUrl', 'downgraded'],
     ])
+  })
+
+  describe('HTTPS test URLs (need Surge iOS 5.23.0+ / Mac 6.10.0+)', () => {
+    const https = 'https://www.gstatic.com/generate_204'
+    const http = 'http://www.gstatic.com/generate_204'
+
+    it('rewrites the test URL of groups to HTTP', () => {
+      const { sec, warnings } = exp(
+        profile({
+          groups: [
+            { name: 'A', type: 'url-test', members: [DIRECT], testUrl: https },
+            { name: 'B', type: 'url-test', members: [DIRECT], testUrl: https },
+          ],
+          rules: [{ type: 'MATCH', target: 'A' }],
+        }),
+      )
+      expect(sec.get('General')).toEqual([`proxy-test-url = ${http}`])
+      expect(warnings).toEqual([
+        {
+          level: 'info',
+          path: 'groups[0].testUrl',
+          code: 'TEST_URL_REWRITTEN',
+          message: expect.stringContaining('5.23.0'),
+          action: 'downgraded',
+        },
+      ])
+    })
+
+    it('rewrites test URLs given in extra.surge', () => {
+      const { sec, warnings } = exp(
+        profile({
+          general: {
+            extra: {
+              surge: { 'proxy-test-url': https, 'Internet-Test-URL': 'HTTPS://a.example.com/' },
+            },
+          },
+          rules: [{ type: 'MATCH', target: 'DIRECT' }],
+        }),
+        [ss('n', { udp: false, extra: { surge: { 'test-url': https } } })],
+      )
+      expect(sec.get('General')).toEqual([
+        `proxy-test-url = ${http}`,
+        'Internet-Test-URL = http://a.example.com/',
+      ])
+      expect(sec.get('Proxy')).toEqual([
+        `n = ss, s.example.com, 8388, encrypt-method=aes-128-gcm, password=p, test-url=${http}`,
+      ])
+      expect(codes(warnings)).toEqual([
+        ['TEST_URL_REWRITTEN', 'general.extra.surge.proxy-test-url', 'downgraded'],
+        ['TEST_URL_REWRITTEN', 'general.extra.surge.Internet-Test-URL', 'downgraded'],
+        ['TEST_URL_REWRITTEN', 'nodes[0].extra.surge.test-url', 'downgraded'],
+      ])
+    })
+
+    it('keeps HTTP test URLs as they are', () => {
+      const { sec, warnings } = exp(
+        profile({
+          groups: [{ name: 'A', type: 'url-test', members: [DIRECT], testUrl: http }],
+          rules: [{ type: 'MATCH', target: 'A' }],
+        }),
+      )
+      expect(sec.get('General')).toEqual([`proxy-test-url = ${http}`])
+      expect(warnings).toEqual([])
+    })
   })
 
   it('drops interval and tolerance where Surge does not use them', () => {
@@ -784,6 +848,52 @@ describe('rules', () => {
 
 describe('general and dns', () => {
   const MATCH: Profile['rules'] = [{ type: 'MATCH', target: 'DIRECT' }]
+
+  it('never writes a General key twice; keys are case-insensitive', () => {
+    const { sec, warnings } = exp(
+      profile({
+        general: {
+          logLevel: 'info',
+          extra: {
+            surge: {
+              loglevel: 'notify',
+              'DNS-Server': '1.1.1.1',
+              'Proxy-Test-URL': 'http://explicit.example.com/',
+              'skip-proxy': 'localhost',
+            },
+          },
+        },
+        dns: {
+          nameserver: ['223.5.5.5'],
+          extra: { surge: { 'Skip-Proxy': '*.local', 'always-real-ip': '*.lan' } },
+        },
+        groups: [
+          {
+            name: 'A',
+            type: 'url-test',
+            members: [{ kind: 'builtin', name: 'DIRECT' }],
+            testUrl: 'http://group.example.com/',
+          },
+        ],
+        rules: [{ type: 'MATCH', target: 'A' }],
+      }),
+    )
+    expect(sec.get('General')).toEqual([
+      'loglevel = info',
+      'dns-server = 223.5.5.5',
+      'Proxy-Test-URL = http://explicit.example.com/',
+      'skip-proxy = localhost',
+      'always-real-ip = *.lan',
+    ])
+    const keys = (sec.get('General') ?? []).map((l) => l.split(' = ')[0]?.toLowerCase())
+    expect(new Set(keys).size).toBe(keys.length)
+    expect(codes(warnings)).toEqual([
+      ['EXTRA_IGNORED', 'general.extra.surge.loglevel', 'dropped'],
+      ['EXTRA_IGNORED', 'general.extra.surge.DNS-Server', 'dropped'],
+      ['EXTRA_IGNORED', 'dns.extra.surge.Skip-Proxy', 'dropped'],
+      ['UNSUPPORTED_GROUP_OPTION', 'groups[0].testUrl', 'downgraded'],
+    ])
+  })
 
   it('maps the basic settings and drops the rest with warnings', () => {
     const { sec, warnings } = exp(

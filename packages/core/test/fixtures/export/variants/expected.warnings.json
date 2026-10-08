@@ -256,6 +256,13 @@
       "action": "kept"
     },
     {
+      "level": "info",
+      "path": "groups[1].testUrl",
+      "code": "TEST_URL_REWRITTEN",
+      "message": "HTTPS test URLs need Surge iOS 5.23.0+ / Mac 6.10.0+; the HTTP URL is used instead",
+      "action": "downgraded"
+    },
+    {
       "level": "warn",
       "path": "extra.mihomo",
       "code": "EXTRA_IGNORED",

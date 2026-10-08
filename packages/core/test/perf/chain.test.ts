@@ -31,13 +31,14 @@ describe(`performance: ${NODE_COUNT} nodes`, () => {
     const { text, warnings } = runChain(exporter)
     const supported = imported.filter((p) => exporter.capabilities.proxyTypes.includes(p.type))
     expect(text.match(/\[A\] /g)).toHaveLength(supported.length)
-    // 只有不支持的节点类型和规则集下载策略的警告
+    // 只有不支持的节点类型、规则集下载策略和（Surge 的）测速地址改写的警告
     const unsupported = NODE_COUNT - supported.length
     expect(warnings.filter((w) => w.code === 'UNSUPPORTED_PROXY_TYPE')).toHaveLength(unsupported)
-    expect(
-      warnings.filter(
-        (w) => w.code !== 'UNSUPPORTED_PROXY_TYPE' && w.code !== 'RULE_SET_PROXY_UNSUPPORTED',
-      ),
-    ).toEqual([])
+    const expected = new Set([
+      'UNSUPPORTED_PROXY_TYPE',
+      'RULE_SET_PROXY_UNSUPPORTED',
+      'TEST_URL_REWRITTEN',
+    ])
+    expect(warnings.filter((w) => !expected.has(w.code))).toEqual([])
   })
 })
