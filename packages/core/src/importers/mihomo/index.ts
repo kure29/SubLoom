@@ -66,14 +66,16 @@ export function importMihomoYaml(text: string): ImportResult {
   const groups = convertGroups(doc['proxy-groups'], new Set(proxies.map((p) => p.name)), warnings)
   const ruleSets = convertRuleProviders(doc['rule-providers'], warnings)
   const rules = convertRules(doc.rules, warnings)
-  const config: ImportedConfig = canonical({
-    general,
-    dns,
+  const extra = extraOf('mihomo', Object.keys(rest).length ? rest : undefined)
+  // 各部分已是规范形式，这里只去掉缺省的部分（再次规范化会丢掉 general.ipv6: false）
+  const config: ImportedConfig = {
+    ...(general && { general }),
+    ...(dns && { dns }),
     groups,
     ruleSets,
     rules,
-    extra: extraOf('mihomo', Object.keys(rest).length ? rest : undefined),
-  })
+    ...(extra && { extra }),
+  }
   // 警告在 config 之后输出，保持 { format, proxies, config, warnings } 的顺序
   return { format: 'mihomo-yaml', proxies, config, warnings }
 }

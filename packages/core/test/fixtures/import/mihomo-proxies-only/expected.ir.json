@@ -6,6 +6,7 @@
       "type": "ss",
       "server": "info.example.com",
       "port": 1,
+      "udp": false,
       "cipher": "aes-128-gcm",
       "password": "info"
     },
@@ -14,6 +15,7 @@
       "type": "ss",
       "server": "info.example.com",
       "port": 2,
+      "udp": false,
       "cipher": "aes-128-gcm",
       "password": "info"
     },
@@ -40,6 +42,7 @@
       "type": "ss",
       "server": "jp01.example.com",
       "port": 8443,
+      "udp": false,
       "cipher": "chacha20-ietf-poly1305",
       "password": "fake-pass-jp01",
       "plugin": {
@@ -150,6 +153,7 @@
       "type": "hysteria2",
       "server": "kr01.example.com",
       "port": 443,
+      "udp": true,
       "password": "fake-pass-kr01",
       "obfs": {
         "type": "salamander",
@@ -175,6 +179,7 @@
       "type": "tuic",
       "server": "uk01.example.com",
       "port": 443,
+      "udp": true,
       "uuid": "00000000-0000-4000-8000-000000000005",
       "password": "fake-pass-uk01",
       "congestionController": "bbr",

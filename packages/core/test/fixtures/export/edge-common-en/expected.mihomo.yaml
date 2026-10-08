@@ -1,0 +1,171 @@
+proxies:
+  - name: Legacy SS
+    type: ss
+    server: legacy.example.com
+    port: 8388
+    cipher: aes-128-gcm
+    password: legacy-pass
+    udp: true
+  - name: noname.example.com:8388
+    type: ss
+    server: noname.example.com
+    port: 8388
+    cipher: aes-256-gcm
+    password: noname
+    udp: true
+  - name: VMess 数字端口 无TLS
+    type: vmess
+    server: 198.51.100.20
+    port: 10086
+    uuid: 00000000-0000-4000-8000-000000000006
+    alterId: 0
+    cipher: auto
+    udp: true
+  - name: VLESS 无加密
+    type: vless
+    server: plain.example.com
+    port: 80
+    uuid: 00000000-0000-4000-8000-000000000007
+    udp: true
+  - name: hy2 别名协议
+    type: hysteria2
+    server: hy2.example.com
+    port: 443
+    password: fake-pass-hy2
+    udp: true
+    sni: hy2.example.com
+    skip-cert-verify: true
+  - name: Port Hopping
+    type: hysteria2
+    server: hop.example.com
+    port: 20000
+    password: fake-pass-hop
+    ports: 20000-30000
+    udp: true
+    sni: hop.example.com
+  - name: Duplicate Name
+    type: trojan
+    server: dup.example.com
+    port: 443
+    password: fake-pass-dup
+    udp: true
+    sni: dup.example.com
+  - name: Duplicate Name 2
+    type: trojan
+    server: dup2.example.com
+    port: 443
+    password: fake-pass-dup2
+    udp: true
+    sni: dup2.example.com
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - Auto
+      - DIRECT
+    include-all-proxies: true
+  - name: Auto
+    type: url-test
+    include-all-proxies: true
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: AI
+    type: select
+    proxies:
+      - Proxy
+      - Auto
+    include-all-proxies: true
+  - name: YouTube
+    type: select
+    proxies:
+      - Proxy
+      - Auto
+      - DIRECT
+    include-all-proxies: true
+  - name: Google
+    type: select
+    proxies:
+      - Proxy
+      - Auto
+      - DIRECT
+    include-all-proxies: true
+  - name: Telegram
+    type: select
+    proxies:
+      - Proxy
+      - Auto
+      - DIRECT
+    include-all-proxies: true
+  - name: Microsoft
+    type: select
+    proxies:
+      - DIRECT
+      - Proxy
+      - Auto
+    include-all-proxies: true
+  - name: Final
+    type: select
+    proxies:
+      - Proxy
+      - DIRECT
+rule-providers:
+  lan:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Lan/Lan.yaml
+    interval: 86400
+  openai:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/OpenAI/OpenAI.yaml
+    interval: 86400
+  claude:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Claude/Claude.yaml
+    interval: 86400
+  gemini:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Gemini/Gemini.yaml
+    interval: 86400
+  youtube:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/YouTube/YouTube.yaml
+    interval: 86400
+  google:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Google/Google.yaml
+    interval: 86400
+  telegram:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Telegram/Telegram.yaml
+    interval: 86400
+  microsoft:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Microsoft/Microsoft.yaml
+    interval: 86400
+rules:
+  - RULE-SET,lan,DIRECT,no-resolve
+  - RULE-SET,openai,AI
+  - RULE-SET,claude,AI
+  - RULE-SET,gemini,AI
+  - RULE-SET,youtube,YouTube
+  - RULE-SET,google,Google
+  - RULE-SET,telegram,Telegram,no-resolve
+  - RULE-SET,microsoft,Microsoft
+  - GEOIP,CN,DIRECT
+  - MATCH,Final

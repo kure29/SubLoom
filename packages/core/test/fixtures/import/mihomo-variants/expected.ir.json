@@ -20,6 +20,7 @@
       "type": "ss",
       "server": "v2.example.com",
       "port": 443,
+      "udp": false,
       "cipher": "aes-128-gcm",
       "password": "fake-v2",
       "plugin": {
@@ -43,6 +44,7 @@
       "type": "ss",
       "server": "st.example.com",
       "port": 443,
+      "udp": false,
       "cipher": "2022-blake3-aes-128-gcm",
       "password": "AAAAAAAAAAAAAAAAAAAAAA==",
       "extra": {
@@ -61,6 +63,7 @@
       "type": "ssr",
       "server": "ssr.example.com",
       "port": 443,
+      "udp": false,
       "cipher": "chacha20-ietf",
       "password": "fake-ssr",
       "obfs": "http_simple",
@@ -73,6 +76,7 @@
       "type": "vmess",
       "server": "vh2.example.com",
       "port": 443,
+      "udp": false,
       "uuid": "00000000-0000-4000-8000-000000000021",
       "alterId": 0,
       "cipher": "auto",
@@ -95,6 +99,7 @@
       "type": "vmess",
       "server": "198.51.100.40",
       "port": 80,
+      "udp": false,
       "uuid": "00000000-0000-4000-8000-000000000022",
       "alterId": 0,
       "cipher": "auto",
@@ -124,6 +129,7 @@
       "type": "vless",
       "server": "up.example.com",
       "port": 443,
+      "udp": false,
       "uuid": "00000000-0000-4000-8000-000000000023",
       "tls": {
         "sni": "up.example.com"
@@ -146,6 +152,7 @@
       "type": "vless",
       "server": "203.0.113.40",
       "port": 443,
+      "udp": false,
       "uuid": "00000000-0000-4000-8000-000000000024",
       "tls": {
         "sni": "www.example.com",
@@ -173,6 +180,7 @@
       "type": "vless",
       "server": "ed.example.com",
       "port": 443,
+      "udp": false,
       "uuid": "00000000-0000-4000-8000-000000000025",
       "tls": {},
       "transport": {
@@ -187,6 +195,7 @@
       "type": "trojan",
       "server": "ech.example.com",
       "port": 443,
+      "udp": false,
       "password": "fake-ech",
       "tls": {
         "sni": "ech.example.com",
@@ -202,6 +211,7 @@
       "type": "hysteria2",
       "server": "2001:db8::30",
       "port": 443,
+      "udp": true,
       "password": "fake-hy2",
       "ports": "443,20000-30000",
       "up": "50",
@@ -223,6 +233,7 @@
       "type": "tuic",
       "server": "tuic.example.com",
       "port": 443,
+      "udp": true,
       "uuid": "00000000-0000-4000-8000-000000000026",
       "password": "fake-tuic",
       "congestionController": "bbr",
@@ -263,6 +274,7 @@
       "type": "anytls",
       "server": "anytls.example.com",
       "port": 443,
+      "udp": false,
       "password": "fake-anytls",
       "tls": {
         "sni": "anytls.example.com"
@@ -278,6 +290,7 @@
       "type": "http",
       "server": "http.example.com",
       "port": 443,
+      "udp": false,
       "username": "fake-user",
       "password": "fake-pass",
       "tls": {
@@ -496,6 +509,7 @@
       {
         "type": "IP-CIDR",
         "value": "203.0.113.0/24",
+        "src": true,
         "target": "DIRECT"
       },
       {
@@ -587,12 +601,6 @@
       "code": "INVALID_RULE",
       "path": "rules[9]",
       "message": "missing target"
-    },
-    {
-      "level": "info",
-      "code": "UNSUPPORTED_RULE_PARAM",
-      "path": "rules[10]",
-      "message": "ignored unsupported parameters: src"
     }
   ]
 }

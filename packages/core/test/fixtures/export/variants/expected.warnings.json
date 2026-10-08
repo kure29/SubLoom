@@ -1,0 +1,19 @@
+{
+  "pipeline": [],
+  "export": [
+    {
+      "level": "warn",
+      "path": "groups[0].members[1]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[5]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist",
+      "action": "dropped"
+    }
+  ]
+}

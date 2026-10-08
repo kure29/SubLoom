@@ -1,9 +1,11 @@
+import { NO_RESOLVE, SRC } from '../../formats/mihomo.js'
 import {
   LOGICAL_RULE_TYPES,
   type Rule,
   type RuleCondition,
   RuleSchema,
   RuleTypeSchema,
+  SRC_RULE_TYPES,
 } from '../../ir/index.js'
 import type { ImportWarning } from '../types.js'
 import { canonical, describeIssues, ImportError } from '../util.js'
@@ -92,7 +94,9 @@ function parseCondition(text: string, hasTarget: boolean): Parsed {
   const tail = hasTarget ? fields.splice(0, 1) : []
   const ignoredParams: string[] = []
   for (const param of fields) {
-    if (param.toLowerCase() === 'no-resolve') condition.noResolve = true
+    if (param.toLowerCase() === NO_RESOLVE) condition.noResolve = true
+    // mihomo 只在这些规则上识别 src（区分大小写），其余情况它会忽略该参数
+    else if (param === SRC && SRC_RULE_TYPES.has(type)) condition.src = true
     else if (param) ignoredParams.push(param)
   }
   return { condition, tail, ignoredParams }

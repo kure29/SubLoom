@@ -603,6 +603,8 @@ proxies: []
       bindAddress: '*',
       mode: 'rule',
       logLevel: 'warning',
+      // mihomo 的 ipv6 默认为 true，false 不能省略
+      ipv6: false,
     })
     expect(config.dns).toEqual({
       enable: true,

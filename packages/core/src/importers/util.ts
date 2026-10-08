@@ -181,16 +181,19 @@ export function extraOf(source: ExtraSource, rest: Record<string, unknown> | und
   return rest && Object.keys(rest).length ? { [source]: rest } : undefined
 }
 
+/** 三态字段：false 与未设置含义不同，规范化时保留 false */
+const TRI_STATE_KEYS: ReadonlySet<string> = new Set(['udp'])
+
 /**
  * 规范形式：去掉值为 undefined 或 false 的字段（extra 内部原样保留）。
- * 默认值为 false 的可选布尔字段因此统一省略。
+ * 默认值为 false 的可选布尔字段因此统一省略；三态字段（udp）保留 false。
  */
 export function canonical<T>(value: T): T {
   if (Array.isArray(value)) return value.map(canonical) as T
   if (!isRecordLike(value)) return value
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value)) {
-    if (v === undefined || v === false) continue
+    if (v === undefined || (v === false && !TRI_STATE_KEYS.has(k))) continue
     out[k] = k === 'extra' ? v : canonical(v)
   }
   return out as T

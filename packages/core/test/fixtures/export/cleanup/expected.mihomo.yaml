@@ -1,0 +1,81 @@
+proxy-providers:
+  provider1:
+    type: http
+    url: https://sub.example.com/provider.yaml
+    interval: 3600
+proxies:
+  - name: Shared
+    type: trojan
+    server: manual.example.com
+    port: 443
+    password: fake-manual
+    udp: false
+  - name: Proxy 2
+    type: ss
+    server: clash.example.com
+    port: 8388
+    cipher: aes-128-gcm
+    password: fake-clash
+    udp: false
+  - name: Shared 2
+    type: ss
+    server: sub1.example.com
+    port: 8388
+    cipher: aes-128-gcm
+    password: fake-sub1
+    udp: false
+  - name: Shared 3
+    type: ss
+    server: sub2.example.com
+    port: 8388
+    cipher: aes-128-gcm
+    password: fake-sub2
+    udp: true
+  - name: DIRECT 2
+    type: ss
+    server: sub3.example.com
+    port: 8388
+    cipher: aes-128-gcm
+    password: fake-sub3
+    udp: false
+  - name: URI extra
+    type: hysteria2
+    server: hy.example.com
+    port: 443
+    password: fake-hy
+    udp: false
+    sni: hy.example.com
+  - name: Surge extra
+    type: trojan
+    server: t.example.com
+    port: 443
+    password: fake-t
+    udp: false
+    ip-version: ipv4
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - Shared
+      - Proxy 2
+      - Empty
+      - Provider
+  - name: Empty
+    type: fallback
+    proxies:
+      - DIRECT
+  - name: Provider
+    type: select
+    use:
+      - provider1
+rule-providers:
+  ok:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://rules.example.com/ok.yaml
+rules:
+  - RULE-SET,ok,Proxy
+  - DOMAIN,b.example.com,Shared
+  - DOMAIN,c.example.com,Empty
+  - MATCH,Proxy

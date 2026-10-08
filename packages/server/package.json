@@ -13,8 +13,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "catalog:",

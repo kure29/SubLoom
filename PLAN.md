@@ -195,6 +195,7 @@ interface Profile {
 
 - 字段名统一 camelCase，与来源格式无关。节点的 TS 类型名为 `ProxyNode`（避免遮蔽全局 `Proxy`），schema 为 `ProxySchema`。
 - **规范形式**：默认值为 false 的可选布尔字段（`tfo`、`skipCertVerify`、`hidden`、`noResolve`、`src` 等），值为 false 时省略，由导入器负责规范化。来源无法表达的信息不编造。
+- 默认值不是 false 的布尔字段不省略 false：如 GeneralConfig 的 `ipv6`（mihomo 默认开启）。
 - **`udp` 是三态**，不按上一条省略 false：`true` / `false` 表示来源明确给出的值，未设置表示来源无法表达（如 URI 链接），导出时按导出选项 `defaultUdp` 处理。mihomo YAML 能表达 UDP，未写 `udp` 时按 mihomo 的默认值记录：hysteria2、tuic 为 `true`（mihomo 对这两种协议总是开启 UDP），其余为 `false`。
 - **规则参数**：mihomo 的 `no-resolve`、`src` 参数分别映射为 `noResolve`、`src`（子条件同样适用）。`src` 只允许出现在 mihomo 支持它的规则类型上，丢弃它会把"按来源 IP 匹配"变成"按目标 IP 匹配"，因此必须保留；其余参数丢弃并给出 `UNSUPPORTED_RULE_PARAM` 警告。
 - **extra 按来源格式分命名空间**：如 `extra: { mihomo: { 'ip-version': 'ipv4' } }`、`extra: { uri: { pinSHA256: '...' } }`，键名和嵌套结构保持来源原样（mihomo 子对象中剩余的键放在同名子对象下，如 `{ 'ws-opts': { ... } }`）。导出器只合并与自己格式相同的那份，其余给出警告。
@@ -270,7 +271,7 @@ type PipelineOp =
 ```
 
 - `runPipeline(nodes, ops)` 是纯函数，按顺序执行，返回 `{ nodes, warnings }`。它只处理订阅节点，手动添加的节点（`profile.proxies`）不经过流水线。
-- **正则**：JavaScript RegExp 语法，只匹配节点名称；为与 mihomo 策略组的 `filter` 写法兼容，允许以 `(?i)` 开头表示忽略大小写。`rename-regex` 全局替换，替换串支持 `$1` 等。正则非法时跳过该操作并警告，不中断流水线。
+- **正则**：JavaScript RegExp 语法（以 `u` 标志编译，便于匹配国旗等 emoji），只匹配节点名称；为与 mihomo 策略组的 `filter` 写法兼容，允许以 `(?i)` 开头表示忽略大小写。`rename-regex` 全局替换，替换串支持 `$1` 等。正则非法时跳过该操作并警告，不中断流水线。
 - **地区**：`regions` 使用 ISO 3166-1 alpha-2 代码（如 `HK`、`JP`、`US`）。地区由节点名识别：优先看国旗 emoji，其次按内置地区表匹配中英文名称、常见城市和代码（ASCII 代码按单词边界、区分大小写匹配，避免 `US` 误中 `RUSSIA`）。识别不出地区的节点：`filter-region` 的 keep 模式丢弃、drop 模式保留。
 - `add-flag`：在名称前加地区国旗和一个空格；名称已以国旗开头或识别不出地区时不变。
 - `sort`：稳定排序。`name` 按 `Intl.Collator`（numeric）比较；`region` 按内置地区表的顺序（常见地区在前），识别不出地区的节点无论升降序都排在最后。
@@ -471,11 +472,11 @@ GET /sub/:token
 ### M1 core：IR 与 mihomo
 - [x] IR zod schema（第 4 节）
 - [x] 导入器：mihomo YAML；URI（ss、vmess、vless 含 reality、trojan、hysteria2）；Base64 订阅自动识别
-- [ ] mihomo 导出器（含 rule-providers 风格的规则集输出；proxy-providers 依赖输出链接，放到 M4）
-- [ ] 流水线操作（第 4 节全部）
-- [ ] 预设模板 2 套（极简、常用分流）
-- [ ] golden 测试，CI 中执行 `mihomo -t`
-- [ ] 有测试后去掉各包 `test` 脚本中的 `--passWithNoTests`（还没有测试的包不声明 `test` 脚本，加测试时再加回）
+- [x] mihomo 导出器（含 rule-providers 风格的规则集输出；proxy-providers 依赖输出链接，放到 M4）
+- [x] 流水线操作（第 4 节全部）
+- [x] 预设模板 2 套（极简、常用分流）
+- [x] golden 测试，CI 中执行 `mihomo -t`
+- [x] 有测试后去掉各包 `test` 脚本中的 `--passWithNoTests`（还没有测试的包不声明 `test` 脚本，加测试时再加回）
 - **验收**：样例订阅导入后经流水线处理，导出的配置能通过 `mihomo -t`
 
 ### M2 core：Surge 与兼容性警告

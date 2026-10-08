@@ -1,4 +1,12 @@
 import {
+  DEFAULT_UDP,
+  type Field,
+  HAS_TRANSPORT,
+  PROTOCOL_FIELDS,
+  SNI_KEY,
+  TLS_MODE,
+} from '../../formats/mihomo.js'
+import {
   type ProxyNode,
   type ProxyType,
   ProxyTypeSchema,
@@ -6,93 +14,6 @@ import {
   type Transport,
 } from '../../ir/index.js'
 import { extraOf, ImportError, invalid, isRecord, nest, Reader } from '../util.js'
-
-type Kind = 'string' | 'int' | 'bool' | 'list' | 'bandwidth' | 'reserved'
-
-interface Field {
-  /** mihomo 字段名 */
-  from: string
-  /** IR 字段名 */
-  to: string
-  kind: Kind
-  required?: boolean
-  default?: unknown
-}
-
-const f = (from: string, to: string, kind: Kind = 'string', opts: Partial<Field> = {}): Field => ({
-  from,
-  to,
-  kind,
-  ...opts,
-})
-
-/** 各协议的专有字段（mihomo → IR） */
-const PROTOCOL_FIELDS: Record<ProxyType, Field[]> = {
-  ss: [
-    f('cipher', 'cipher', 'string', { required: true }),
-    f('password', 'password', 'string', { required: true }),
-  ],
-  ssr: [
-    f('cipher', 'cipher', 'string', { required: true }),
-    f('password', 'password', 'string', { required: true }),
-    f('obfs', 'obfs', 'string', { required: true }),
-    f('obfs-param', 'obfsParam'),
-    f('protocol', 'protocol', 'string', { required: true }),
-    f('protocol-param', 'protocolParam'),
-  ],
-  vmess: [
-    f('uuid', 'uuid', 'string', { required: true }),
-    f('alterId', 'alterId', 'int', { default: 0 }),
-    f('cipher', 'cipher', 'string', { default: 'auto' }),
-  ],
-  vless: [f('uuid', 'uuid', 'string', { required: true }), f('flow', 'flow')],
-  trojan: [f('password', 'password', 'string', { required: true })],
-  hysteria2: [
-    f('password', 'password'),
-    f('ports', 'ports'),
-    f('up', 'up', 'bandwidth'),
-    f('down', 'down', 'bandwidth'),
-  ],
-  tuic: [
-    f('uuid', 'uuid', 'string', { required: true }),
-    f('password', 'password', 'string', { required: true }),
-    f('congestion-controller', 'congestionController'),
-    f('udp-relay-mode', 'udpRelayMode'),
-    f('reduce-rtt', 'reduceRtt', 'bool'),
-  ],
-  wireguard: [
-    f('private-key', 'privateKey', 'string', { required: true }),
-    f('public-key', 'publicKey', 'string', { required: true }),
-    f('pre-shared-key', 'preSharedKey'),
-    f('ip', 'ip'),
-    f('ipv6', 'ipv6'),
-    f('reserved', 'reserved', 'reserved'),
-    f('mtu', 'mtu', 'int'),
-  ],
-  anytls: [f('password', 'password', 'string', { required: true })],
-  http: [f('username', 'username'), f('password', 'password')],
-  socks5: [f('username', 'username'), f('password', 'password')],
-}
-
-/** none：无 TLS；optional：由 tls: true 开启；always：协议自带 TLS */
-const TLS_MODE: Record<ProxyType, 'none' | 'optional' | 'always'> = {
-  ss: 'none',
-  ssr: 'none',
-  vmess: 'optional',
-  vless: 'optional',
-  trojan: 'always',
-  hysteria2: 'always',
-  tuic: 'always',
-  wireguard: 'none',
-  anytls: 'always',
-  http: 'optional',
-  socks5: 'optional',
-}
-
-/** vmess / vless 的 SNI 字段叫 servername，其余协议叫 sni */
-const SNI_KEY: Partial<Record<ProxyType, string>> = { vmess: 'servername', vless: 'servername' }
-
-const HAS_TRANSPORT: ReadonlySet<ProxyType> = new Set(['vmess', 'vless', 'trojan'])
 
 function readField(r: Reader, field: Field): unknown {
   let value: unknown
@@ -150,7 +71,8 @@ export function convertProxy(src: unknown): ProxyNode {
     type,
     server: r.requiredStr('server'),
     port: r.port('port'),
-    udp: r.bool('udp'),
+    // udp 是三态：未写时记录 mihomo 的默认行为
+    udp: r.bool('udp') ?? DEFAULT_UDP[type] ?? false,
     tfo: r.bool('tfo'),
   }
   for (const field of PROTOCOL_FIELDS[type]) out[field.to] = readField(r, field)
