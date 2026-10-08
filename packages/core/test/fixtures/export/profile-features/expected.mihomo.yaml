@@ -1,0 +1,197 @@
+port: 7891
+socks-port: 7892
+redir-port: 7893
+tproxy-port: 7894
+mixed-port: 7890
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: warning
+ipv6: true
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
+profile:
+  store-selected: true
+dns:
+  enable: true
+  ipv6: true
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 223.5.5.5
+  nameserver:
+    - https://dns.example.com/dns-query
+  fallback:
+    - tls://dns.example.net:853
+  fake-ip-filter:
+    - "*.lan"
+    - +.local
+proxies:
+  - name: Home SOCKS
+    type: socks5
+    server: 198.51.100.50
+    port: 1080
+    username: fake-user
+    password: fake-pass
+    udp: true
+  - name: Office HTTP
+    type: http
+    server: http.example.com
+    port: 443
+    password: fake-pass
+    udp: false
+    tls: true
+    sni: http.example.com
+    skip-cert-verify: true
+  - name: WG
+    type: wireguard
+    server: 198.51.100.51
+    port: 51820
+    private-key: ZmFrZS1wcml2YXRl
+    public-key: ZmFrZS1wdWJsaWM=
+    pre-shared-key: ZmFrZS1wc2s=
+    ip: 10.0.0.2
+    ipv6: fd00::2
+    reserved:
+      - 1
+      - 2
+      - 3
+    mtu: 1280
+    udp: true
+    allowed-ips:
+      - 0.0.0.0/0
+      - ::/0
+  - name: TUIC
+    type: tuic
+    server: tuic.example.com
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000051
+    password: fake-tuic
+    congestion-controller: bbr
+    udp-relay-mode: native
+    reduce-rtt: true
+    udp: true
+    sni: tuic.example.com
+    alpn:
+      - h3
+  - name: AnyTLS
+    type: anytls
+    server: anytls.example.com
+    port: 443
+    password: fake-anytls
+    udp: true
+    tfo: true
+    client-fingerprint: chrome
+    idle-session-check-interval: 30
+  - name: VMess HTTP
+    type: vmess
+    server: 198.51.100.52
+    port: 80
+    uuid: 00000000-0000-4000-8000-000000000052
+    alterId: 0
+    cipher: auto
+    udp: true
+    network: http
+    http-opts:
+      method: GET
+      path:
+        - /
+        - /video
+      headers:
+        Host:
+          - a.example.com
+        Connection:
+          - keep-alive
+  - name: SSR
+    type: ssr
+    server: ssr.example.com
+    port: 443
+    cipher: chacha20-ietf
+    password: fake-ssr
+    obfs: http_simple
+    obfs-param: o.example.com
+    protocol: auth_aes128_sha1
+    protocol-param: 100:fake
+    udp: true
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - Auto
+      - Fallback
+      - Balance
+      - Home SOCKS
+      - DIRECT
+    include-all-proxies: true
+    icon: https://icon.example.com/proxy.png
+  - name: Auto
+    type: url-test
+    include-all-proxies: true
+    filter: (?i)wg|tuic
+    exclude-filter: Office
+    url: https://cp.example.com/generate_204
+    interval: 300
+    tolerance: 50
+    lazy: true
+    timeout: 2000
+  - name: Fallback
+    type: fallback
+    proxies:
+      - WG
+      - TUIC
+    url: https://cp.example.com/generate_204
+    interval: 600
+    hidden: true
+  - name: Balance
+    type: load-balance
+    proxies:
+      - WG
+      - AnyTLS
+      - VMess HTTP
+    strategy: consistent-hashing
+  - name: Block
+    type: select
+    proxies:
+      - REJECT
+      - REJECT-DROP
+      - DIRECT
+rule-providers:
+  ads:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://rules.example.com/ads.yaml
+    interval: 86400
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://rules.example.com/cn.mrs
+  apps:
+    type: http
+    behavior: classical
+    format: text
+    url: https://rules.example.com/apps.list
+    path: ./ruleset/apps.list
+    proxy: DIRECT
+rules:
+  - RULE-SET,ads,Block
+  - DOMAIN,direct.example.com,DIRECT
+  - DOMAIN-SUFFIX,example.org,Proxy
+  - DOMAIN-KEYWORD,tracker,REJECT
+  - DOMAIN-REGEX,^api\d+\.example\.net$,Auto
+  - GEOSITE,category-ads-all,REJECT-DROP
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,192.168.50.0/24,Home SOCKS,src
+  - IP-CIDR6,fd00::/8,DIRECT,src,no-resolve
+  - SRC-IP-CIDR,10.10.0.0/16,Fallback
+  - IP-ASN,64500,DIRECT,src
+  - PROCESS-NAME,curl,Office HTTP
+  - DST-PORT,22,DIRECT
+  - OR,((NOT,((DOMAIN-SUFFIX,example.com))),(AND,((RULE-SET,cn-ip,src),(DST-PORT,443)))),Balance
+  - RULE-SET,apps,Proxy
+  - RULE-SET,cn-ip,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy

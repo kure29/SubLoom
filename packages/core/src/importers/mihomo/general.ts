@@ -1,3 +1,4 @@
+import { DNS_KEYS, GENERAL_KEYS } from '../../formats/mihomo.js'
 import {
   type DnsConfig,
   DnsConfigSchema,
@@ -29,30 +30,41 @@ const strList: Conv = (v) => {
   return v
 }
 
-/** mihomo 键 → [IR 字段, 转换]。无法转换的值不映射，原样留在 extra。 */
-const GENERAL_FIELDS: Record<string, [string, Conv]> = {
-  port: ['port', port],
-  'socks-port': ['socksPort', port],
-  'redir-port': ['redirPort', port],
-  'tproxy-port': ['tproxyPort', port],
-  'mixed-port': ['mixedPort', port],
-  'allow-lan': ['allowLan', bool],
-  'bind-address': ['bindAddress', str],
-  mode: ['mode', lowerEnum('rule', 'global', 'direct')],
-  'log-level': ['logLevel', lowerEnum('silent', 'error', 'warning', 'info', 'debug')],
-  ipv6: ['ipv6', bool],
+/** IR 字段的转换。无法转换的值不映射，原样留在 extra。 */
+const GENERAL_CONV: Record<(typeof GENERAL_KEYS)[number][1], Conv> = {
+  port: port,
+  socksPort: port,
+  redirPort: port,
+  tproxyPort: port,
+  mixedPort: port,
+  allowLan: bool,
+  bindAddress: str,
+  mode: lowerEnum('rule', 'global', 'direct'),
+  logLevel: lowerEnum('silent', 'error', 'warning', 'info', 'debug'),
+  ipv6: bool,
 }
 
-const DNS_FIELDS: Record<string, [string, Conv]> = {
-  enable: ['enable', bool],
-  ipv6: ['ipv6', bool],
-  listen: ['listen', str],
-  'enhanced-mode': ['enhancedMode', lowerEnum('fake-ip', 'redir-host', 'normal')],
-  'fake-ip-range': ['fakeIpRange', str],
-  'default-nameserver': ['defaultNameserver', strList],
-  nameserver: ['nameserver', strList],
-  fallback: ['fallback', strList],
+const DNS_CONV: Record<(typeof DNS_KEYS)[number][1], Conv> = {
+  enable: bool,
+  ipv6: bool,
+  listen: str,
+  enhancedMode: lowerEnum('fake-ip', 'redir-host', 'normal'),
+  fakeIpRange: str,
+  defaultNameserver: strList,
+  nameserver: strList,
+  fallback: strList,
 }
+
+/** mihomo 键 → [IR 字段, 转换] */
+function table<K extends string>(
+  keys: ReadonlyArray<readonly [string, K]>,
+  conv: Record<K, Conv>,
+): Record<string, [string, Conv]> {
+  return Object.fromEntries(keys.map(([from, to]) => [from, [to, conv[to]]]))
+}
+
+const GENERAL_FIELDS = table(GENERAL_KEYS, GENERAL_CONV)
+const DNS_FIELDS = table(DNS_KEYS, DNS_CONV)
 
 /** 按字段表映射，返回映射结果和未映射的键 */
 function mapFields(src: Record<string, unknown>, table: Record<string, [string, Conv]>) {
@@ -81,7 +93,8 @@ export function convertGeneral(top: Record<string, unknown>): {
   rest: Record<string, unknown>
 } {
   const { mapped, rest } = mapFields(top, GENERAL_FIELDS)
-  const general = nonEmpty(canonical(mapped))
+  // mihomo 的 ipv6 默认为 true，规范化时不能省略 false
+  const general = nonEmpty({ ...canonical(mapped), ...(mapped.ipv6 === false && { ipv6: false }) })
   return general ? { general: GeneralConfigSchema.parse(general), rest } : { rest }
 }
 

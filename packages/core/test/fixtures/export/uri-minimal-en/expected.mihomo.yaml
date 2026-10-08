@@ -1,0 +1,93 @@
+proxies:
+  - name: "[Demo] 🇭🇰 香港 01"
+    type: ss
+    server: hk01.example.com
+    port: 8388
+    cipher: aes-256-gcm
+    password: fake-pass-hk01
+    udp: false
+  - name: "[Demo] 🇭🇰 香港 02"
+    type: ss
+    server: hk02.example.com
+    port: 8389
+    cipher: 2022-blake3-aes-128-gcm
+    password: AAAAAAAAAAAAAAAAAAAAAA==
+    udp: false
+  - name: "[Demo] 🇯🇵 日本 01"
+    type: ss
+    server: jp01.example.com
+    port: 8443
+    cipher: chacha20-ietf-poly1305
+    password: fake-pass-jp01
+    plugin: obfs
+    plugin-opts:
+      mode: http
+      host: www.bing.com
+    udp: false
+  - name: "[Demo] 🇯🇵 日本 02"
+    type: vmess
+    server: jp02.example.com
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000001
+    alterId: 0
+    cipher: auto
+    udp: false
+    tls: true
+    servername: jp02.example.com
+    client-fingerprint: chrome
+    network: ws
+    ws-opts:
+      path: /vmws
+      headers:
+        Host: jp02.example.com
+  - name: "[Demo] 🇺🇸 美国 01"
+    type: vmess
+    server: us01.example.com
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000002
+    alterId: 0
+    cipher: auto
+    udp: false
+    tls: true
+    servername: us01.example.com
+    network: grpc
+    grpc-opts:
+      grpc-service-name: vmgrpc
+  - name: "[Demo] 🇺🇸 美国 02"
+    type: vless
+    server: 203.0.113.10
+    port: 443
+    uuid: 00000000-0000-4000-8000-000000000003
+    flow: xtls-rprx-vision
+    udp: false
+    tls: true
+    servername: www.example.com
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm8
+      short-id: a1b2c3d4
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - Auto
+      - DIRECT
+    include-all-proxies: true
+  - name: Auto
+    type: url-test
+    include-all-proxies: true
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+rules:
+  - DOMAIN-SUFFIX,local,DIRECT
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
+  - IP-CIDR6,::1/128,DIRECT,no-resolve
+  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
+  - IP-CIDR6,fe80::/10,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy

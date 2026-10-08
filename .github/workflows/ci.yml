@@ -40,3 +40,47 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  mihomo:
+    name: mihomo -t on golden outputs
+    runs-on: ubuntu-latest
+    env:
+      # 固定版本：按 commit 检出源码构建，依赖由 go.sum 校验。升级时同时修改 tag 和 commit。
+      MIHOMO_TAG: v1.19.32
+      MIHOMO_COMMIT: 88dcbf7f1614a67c3b36b848ee3592dfa92ada36
+      MIHOMO_BIN: ${{ github.workspace }}/.mihomo/bin/mihomo
+      MIHOMO_HOME: ${{ github.workspace }}/.mihomo/home
+    steps:
+      - uses: actions/checkout@v7
+
+      # 缓存 mihomo 可执行文件和它自动下载的 GEOIP/GEOSITE 数据
+      - name: Restore mihomo
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: .mihomo
+          key: mihomo-${{ env.MIHOMO_COMMIT }}
+
+      - name: Check out mihomo ${{ env.MIHOMO_TAG }}
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: MetaCubeX/mihomo
+          ref: ${{ env.MIHOMO_COMMIT }}
+          path: .mihomo/src
+
+      - uses: actions/setup-go@v7
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build mihomo
+        if: steps.cache.outputs.cache-hit != 'true'
+        working-directory: .mihomo/src
+        run: |
+          go build -trimpath -o "$MIHOMO_BIN" .
+          rm -rf "$GITHUB_WORKSPACE/.mihomo/src"
+
+      - name: mihomo -t
+        run: scripts/mihomo-check.sh "$MIHOMO_BIN" "$MIHOMO_HOME"

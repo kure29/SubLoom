@@ -73,6 +73,16 @@ describe('RuleSchema', () => {
     expect(RuleSchema.parse(rule)).toEqual(rule)
   })
 
+  it.each(['IP-CIDR', 'IP-CIDR6', 'GEOIP', 'IP-ASN', 'RULE-SET'])(
+    'accepts src on %s, including in sub-rules',
+    (type) => {
+      const rule = { type, value: 'v', src: true, target: 'DIRECT' }
+      expect(RuleSchema.parse(rule)).toEqual(rule)
+      const nested = { type: 'NOT', children: [{ type, value: 'v', src: true }], target: 'DIRECT' }
+      expect(RuleSchema.parse(nested)).toEqual(nested)
+    },
+  )
+
   it.each([
     ['MATCH with a value', { type: 'MATCH', value: 'x', target: 'DIRECT' }],
     ['DOMAIN without a value', { type: 'DOMAIN', target: 'DIRECT' }],
@@ -101,6 +111,19 @@ describe('RuleSchema', () => {
       },
     ],
     ['a missing target', { type: 'DOMAIN', value: 'a' }],
+    ['src on a domain rule', { type: 'DOMAIN', value: 'a', src: true, target: 'DIRECT' }],
+    [
+      'src on a logical rule',
+      { type: 'AND', children: [{ type: 'DST-PORT', value: '1' }], src: true, target: 'DIRECT' },
+    ],
+    [
+      'src on a sub-rule that does not support it',
+      {
+        type: 'AND',
+        children: [{ type: 'DST-PORT', value: '1', src: true }],
+        target: 'DIRECT',
+      },
+    ],
   ])('rejects %s', (_, rule) => {
     expect(RuleSchema.safeParse(rule).success).toBe(false)
   })

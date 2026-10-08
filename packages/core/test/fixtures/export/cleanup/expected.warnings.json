@@ -1,0 +1,138 @@
+{
+  "pipeline": [],
+  "export": [
+    {
+      "level": "warn",
+      "path": "groups[1]",
+      "code": "DUPLICATE_GROUP_NAME",
+      "message": "a group with the same name already exists",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "proxies[1]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in target",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[0]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in target",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[1]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in target",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[2]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in target",
+      "action": "kept"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[3].extra.uri",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the uri format cannot be exported to mihomo",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "nodes[4].extra.surge",
+      "code": "EXTRA_IGNORED",
+      "message": "fields from the surge format cannot be exported to mihomo",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[2]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[0].members[3]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the group referenced by this member does not exist",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[2].members[0]",
+      "code": "UNKNOWN_GROUP_MEMBER",
+      "message": "the proxy referenced by this member does not exist",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "groups[2]",
+      "code": "EMPTY_GROUP",
+      "message": "the group has no members left; DIRECT was added",
+      "action": "downgraded"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[0]",
+      "code": "RULE_SET_NO_SOURCE",
+      "message": "the rule set has no mihomo source",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[1]",
+      "code": "UNSUPPORTED_RULE_SET_FORMAT",
+      "message": "mihomo does not support the list format with domain behavior",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "ruleSets[2]",
+      "code": "UNSUPPORTED_RULE_SET_FORMAT",
+      "message": "mihomo does not support the mrs format with classical behavior",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[0]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[1]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[2]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[3]",
+      "code": "UNKNOWN_RULE_SET",
+      "message": "the rule references a rule set that does not exist or cannot be exported",
+      "action": "dropped"
+    },
+    {
+      "level": "warn",
+      "path": "rules[5]",
+      "code": "UNKNOWN_RULE_TARGET",
+      "message": "the rule target does not exist",
+      "action": "dropped"
+    }
+  ]
+}

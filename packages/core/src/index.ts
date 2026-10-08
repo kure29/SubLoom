@@ -1,2 +1,5 @@
+export * from './exporters/index.js'
 export * from './importers/index.js'
 export * from './ir/index.js'
+export * from './pipeline/index.js'
+export * from './templates/index.js'

@@ -1,0 +1,12 @@
+{
+  "pipeline": [],
+  "export": [
+    {
+      "level": "warn",
+      "path": "nodes[7]",
+      "code": "DUPLICATE_PROXY_NAME",
+      "message": "renamed because the name is already used by another proxy, a group or a built-in target",
+      "action": "kept"
+    }
+  ]
+}
