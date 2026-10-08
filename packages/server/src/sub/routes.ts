@@ -14,6 +14,7 @@ import {
 import type { Platform } from '../platform.js'
 import { getProfile, type ProfileRow, toInput } from '../profiles/service.js'
 import { type Ctx, DEFAULT_TTL_SEC, getSourcesByIds, type SourceRow } from '../sources/service.js'
+import { externalUrl } from '../urls.js'
 import { formatUserinfo, mergeUserinfo, type Userinfo } from '../userinfo.js'
 import type { OutputOptions } from '../validation.js'
 import { detectClient, type ExportTarget } from './user-agent.js'
@@ -33,18 +34,6 @@ interface CacheEntry {
 
 /** 正在后台重新生成的缓存：同一份缓存同时只有一个任务 */
 const regenerating = new WeakMap<Platform, Set<string>>()
-
-/** 请求的 URL；反向代理后面按 X-Forwarded-Proto / X-Forwarded-Host 改写 */
-function currentUrl(c: Context<AppEnv>): URL {
-  const url = new URL(c.req.url)
-  const proto = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase()
-  if (proto === 'http' || proto === 'https') url.protocol = `${proto}:`
-  const host = c.req.header('x-forwarded-host')?.split(',')[0]?.trim()
-  if (host && /^[A-Za-z0-9.-]+(:\d{1,5})?$|^\[[0-9A-Fa-f:.]+\](:\d{1,5})?$/.test(host)) {
-    url.host = host
-  }
-  return url
-}
 
 /** RFC 5987 的 ext-value：encodeURIComponent 之外还要编码 ' ( ) * */
 function encodeRfc5987(value: string): string {
@@ -162,7 +151,7 @@ async function serve(c: Context<AppEnv>, kind: 'config' | 'proxies') {
   const sources = await getSourcesByIds(ctx, JSON.parse(profile.sourceIdsJson) as string[])
   const interval = updateIntervalSec(sources)
   const options = JSON.parse(output.optionsJson) as OutputOptions
-  const url = currentUrl(c)
+  const url = externalUrl(c.req.url, (name) => c.req.header(name), ctx.platform.env)
 
   const exportOptions: ExportOptions = { ...options.export }
   let providerUrl: string | null = null

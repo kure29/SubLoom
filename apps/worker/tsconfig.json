@@ -3,8 +3,9 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "types": ["@cloudflare/workers-types"],
+    // vite/client：测试中用 ?raw 读取 core 的 fixtures；cloudflare:test 的类型来自 pool-workers
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types", "vite/client"],
     "noEmit": true
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "vitest.config.ts"]
 }

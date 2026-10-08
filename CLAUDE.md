@@ -46,8 +46,9 @@ core 的导入器和导出器用 golden 测试覆盖，测试代码同样不得�
 ## 数据库与 server 测试约定
 
 - **迁移**：修改 `packages/db/src/schema.ts` 后运行 `pnpm --filter @subloom/db db:generate`（drizzle-kit 生成 `migrations/*.sql`，再内嵌为 `src/migrations.gen.ts`），两者一起提交。已发布的迁移只增不改。`migrations/` 由 drizzle-kit 生成，Biome 不检查；CI 会重新生成并检查没有未提交的变化。
-- **需要数据库的 API 集成测试**写在 `packages/server/test/api/suite.ts`（`describeApi`，不以 `.test.ts` 结尾），由 `apps/node/test/api.test.ts`（M5 起还有 `apps/worker`）传入各自的存储运行；packages/server 自己只运行不需要数据库的单元测试。suite 只能以包名 `@subloom/server` 引用 server 的类型（`import type`），不要用相对路径引用 `src`。
-- **测试中不访问真实网络**：packages/server、apps/node 的 Vitest setup 把全局 `fetch` 换成直接抛错的函数（`unstubGlobals: true`，每个测试后恢复），测试中用 `vi.stubGlobal('fetch', …)` mock；DNS 解析用假的 `resolveHost`。
+- **需要数据库的 API 集成测试**写在 `packages/server/test/api/suite.ts`（`describeApi`，不以 `.test.ts` 结尾），由 `apps/node/test/api.test.ts`（better-sqlite3 + 文件 BlobStore）和 `apps/worker/test/api.test.ts`（`@cloudflare/vitest-pool-workers`，miniflare 的 D1 + KV）传入各自的存储运行，两边都必须通过；packages/server 自己只运行不需要数据库的单元测试。suite 只能以包名 `@subloom/server` 引用 server 的类型（`import type`），不要用相对路径引用 `src`。
+- **Workers 测试**：pool-workers 的存储按测试文件隔离，同一文件中的测试共享，因此 `apps/worker/test` 每个测试前 `reset()`；测试中的异步任务必须 await，不能留到下一个测试。根目录 `wrangler.jsonc` 的 `compatibility_date` 不能晚于 pool-workers 自带的 workerd 支持的日期（与 `apps/worker/vitest.config.ts` 保持一致）。
+- **测试中不访问真实网络**：packages/server、apps/node、apps/worker 的 Vitest setup 把全局 `fetch` 换成直接抛错的函数（`unstubGlobals: true`，每个测试后恢复），测试中用 `vi.stubGlobal('fetch', …)` mock；DNS 解析用假的 `resolveHost`。
 - **日志脱敏**：日志和错误信息中不得出现订阅 URL（可能带 token）、节点地址和密码。
 
 ## 仓库结构
@@ -59,6 +60,8 @@ packages/server   @subloom/server  Hono 应用工厂 createApp(platform)，与�
 apps/web          @subloom/web     前端（Vite + React），private
 apps/node         @subloom/node    Docker 入口，private
 apps/worker       @subloom/worker  Cloudflare Workers 入口，private
+wrangler.jsonc                     Workers 部署配置（放在根目录，供 Deploy 按钮和 GitHub Actions 使用）
+docs/deploy-workers.md             Workers 部署文档
 ```
 
 ## 常用命令
@@ -76,7 +79,7 @@ pnpm build              # 各包构建（turbo）
 pnpm --filter @subloom/core test          # 只跑某个包的任务
 pnpm --filter @subloom/core exec vitest   # watch 模式
 pnpm --filter @subloom/web dev            # 前端开发服务器
-pnpm --filter @subloom/worker dev         # wrangler dev
+pnpm --filter @subloom/worker dev         # wrangler dev（使用根目录的 wrangler.jsonc，先 pnpm build 生成前端静态文件）
 pnpm --filter @subloom/db db:generate     # 修改 schema 后生成迁移
 pnpm build && pnpm --filter @subloom/node start  # 本地运行 Node 版（数据在 apps/node/data）
 ```
@@ -88,6 +91,7 @@ pnpm build && pnpm --filter @subloom/node start  # 本地运行 Node 版（数�
 - `packages/*` 与 `apps/node` 使用 `NodeNext` 模块解析：**相对导入必须带 `.js` 扩展名**（如 `import { x } from './ir/index.js'`）。`apps/web`、`apps/worker` 由打包器处理，使用 `Bundler` 解析。
 - `packages/*` 用 `tsc -p tsconfig.build.json` 输出到 `dist/`（ESM + `.d.ts`），`exports` 指向 `dist`。turbo 的 `typecheck`、`test`、`build` 都依赖上游包先 build。
 - 共用的依赖版本统一写在 `pnpm-workspace.yaml` 的 `catalog` 中，包内用 `"catalog:"` 引用。
-- Vitest 固定在 4.x：M5 需要的 `@cloudflare/vitest-pool-workers` 目前只支持 `vitest ^4.1`，升级前先确认兼容性。
+- Vitest 固定在 4.x：`@cloudflare/vitest-pool-workers` 目前只支持 `vitest ^4.1`，升级前先确认兼容性。
+- **不接触 Cloudflare 凭据**：部署由 GitHub Actions 完成（`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 由用户放在仓库 Secrets 中），`ADMIN_TOKEN`、`SECRET_KEY` 由用户自己设置为 Worker 的 Secret。
 - 测试文件放在各包的 `test/` 目录，命名 `*.test.ts`。
 - 工具链版本可能比你的训练数据新。修改 Turborepo 配置前先读已安装包内的文档（`node_modules/turbo/docs/`，见 `AGENTS.md`，该文件由 turbo 自动维护）；其他工具同理，以已安装版本的文档和 schema 为准。

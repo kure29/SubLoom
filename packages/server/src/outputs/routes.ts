@@ -37,8 +37,9 @@ async function mustGet(ctx: Ctx, id: string): Promise<OutputRow> {
 export const outputRoutes = new Hono<AppEnv>()
   .use(bodyLimit({ maxSize: 64 * 1024 }))
   .get('/', async (c) => {
-    const rows = await listOutputs(c.get('ctx'), c.req.query('profileId'))
-    return c.json({ outputs: rows.map(toDto) })
+    const ctx = c.get('ctx')
+    const rows = await listOutputs(ctx, c.req.query('profileId'))
+    return c.json({ outputs: rows.map((r) => toDto(r, ctx.platform.env)) })
   })
   .post('/', async (c) => {
     const ctx = c.get('ctx')
@@ -47,17 +48,18 @@ export const outputRoutes = new Hono<AppEnv>()
       throw new HttpError(400, 'INVALID_REQUEST', 'profile not found')
     }
     const row = await createOutput(ctx, { ...input, options: input.options ?? {} })
-    return c.json({ output: toDto(row) }, 201)
+    return c.json({ output: toDto(row, ctx.platform.env) }, 201)
   })
   .get('/:id', async (c) => {
-    const row = await mustGet(c.get('ctx'), c.req.param('id'))
-    return c.json({ output: toDto(row) })
+    const ctx = c.get('ctx')
+    const row = await mustGet(ctx, c.req.param('id'))
+    return c.json({ output: toDto(row, ctx.platform.env) })
   })
   .patch('/:id', async (c) => {
     const ctx = c.get('ctx')
     const row = await mustGet(ctx, c.req.param('id'))
     const input = await parseBody(c.req, updateSchema)
-    return c.json({ output: toDto(await updateOutput(ctx, row, input)) })
+    return c.json({ output: toDto(await updateOutput(ctx, row, input), ctx.platform.env) })
   })
   .delete('/:id', async (c) => {
     const ctx = c.get('ctx')
@@ -68,5 +70,5 @@ export const outputRoutes = new Hono<AppEnv>()
   .post('/:id/rotate', async (c) => {
     const ctx = c.get('ctx')
     const row = await mustGet(ctx, c.req.param('id'))
-    return c.json({ output: toDto(await rotateOutput(ctx, row)) })
+    return c.json({ output: toDto(await rotateOutput(ctx, row), ctx.platform.env) })
   })

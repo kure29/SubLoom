@@ -12,6 +12,8 @@ describe('readConfig', () => {
         secretKey: undefined,
         corsOrigins: [],
         allowPrivateFetch: false,
+        publicUrl: undefined,
+        trustProxy: false,
       },
     })
   })
@@ -25,6 +27,8 @@ describe('readConfig', () => {
       SECRET_KEY: '',
       CORS_ORIGINS: 'https://a.example.com/, https://b.example.com ,',
       ALLOW_PRIVATE_FETCH: 'true',
+      PUBLIC_URL: 'https://sub.example.com/',
+      TRUST_PROXY: 'yes',
     })
     expect(config).toEqual({
       port: 8080,
@@ -35,6 +39,8 @@ describe('readConfig', () => {
         secretKey: undefined,
         corsOrigins: ['https://a.example.com', 'https://b.example.com'],
         allowPrivateFetch: true,
+        publicUrl: 'https://sub.example.com',
+        trustProxy: true,
       },
     })
   })
@@ -46,6 +52,10 @@ describe('readConfig', () => {
     for (const v of ['TRUE', '1', 'yes']) {
       expect(readConfig({ ALLOW_PRIVATE_FETCH: v }).env.allowPrivateFetch).toBe(true)
     }
+  })
+
+  it('环境变量的解析与 Workers 共用 parseEnv', () => {
+    expect(() => readConfig({ PUBLIC_URL: 'not a url' })).toThrow(/PUBLIC_URL/)
   })
 
   it('数字不合法时报错', () => {

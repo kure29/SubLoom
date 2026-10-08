@@ -22,15 +22,26 @@ const KEY_SECRET = 'secret_key'
 const KEY_SECRET_CHECK = 'secret_key_check'
 const SECRET_CHECK_PLAINTEXT = 'subloom'
 
-const runtimes = new WeakMap<Platform, Promise<Runtime>>()
+/** 初始化结果只取决于数据库和环境变量：按 (db, env) 两个对象缓存 */
+const runtimes = new WeakMap<object, WeakMap<object, Promise<Runtime>>>()
 
-/** 幂等：同一个 platform 只执行一次（失败时下次重试）。createApp 的中间件在每个请求前等待它。 */
+/**
+ * 幂等：同一份数据库（platform.db 对象）与环境变量（platform.env 对象）只执行一次，失败时下次重试。
+ * Workers 每个请求构造新的 platform（waitUntil 不同），但复用 db 和 env，不会每个请求都重新初始化。
+ * createApp 的中间件在每个请求前等待它。
+ */
 export function bootstrap(platform: Platform): Promise<Runtime> {
-  let p = runtimes.get(platform)
+  let byEnv = runtimes.get(platform.db)
+  if (!byEnv) {
+    byEnv = new WeakMap()
+    runtimes.set(platform.db, byEnv)
+  }
+  let p = byEnv.get(platform.env)
   if (!p) {
     p = init(platform)
-    runtimes.set(platform, p)
-    p.catch(() => runtimes.delete(platform))
+    byEnv.set(platform.env, p)
+    const cache = byEnv
+    p.catch(() => cache.delete(platform.env))
   }
   return p
 }

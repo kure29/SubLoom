@@ -1,4 +1,4 @@
-import type { PlatformEnv } from '@subloom/server'
+import { type PlatformEnv, parseEnv } from '@subloom/server'
 
 export interface NodeConfig {
   port: number
@@ -25,14 +25,7 @@ export function readConfig(vars: Record<string, string | undefined>): NodeConfig
     port: int('PORT', 3000, 1),
     dataDir: str('DATA_DIR') ?? './data',
     refreshIntervalMin: int('REFRESH_INTERVAL_MIN', 10, 0),
-    env: {
-      adminToken: str('ADMIN_TOKEN'),
-      secretKey: str('SECRET_KEY'),
-      corsOrigins: (str('CORS_ORIGINS') ?? '')
-        .split(',')
-        .map((s) => s.trim().replace(/\/+$/, ''))
-        .filter(Boolean),
-      allowPrivateFetch: /^(?:1|true|yes)$/i.test(str('ALLOW_PRIVATE_FETCH') ?? ''),
-    },
+    // 与 Workers 共用的环境变量解析
+    env: parseEnv(vars),
   }
 }

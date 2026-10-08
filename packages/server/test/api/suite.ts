@@ -32,6 +32,7 @@ const ENV: Server.PlatformEnv = {
   secretKey: 'test-secret-key',
   corsOrigins: ['https://app.example.com'],
   allowPrivateFetch: false,
+  trustProxy: false,
 }
 const SUB_URL = 'https://sub.example.com/api/v1/client/subscribe?token=CANARY'
 /** uri-mixed 系列 fixtures 的节点数 */
@@ -203,6 +204,20 @@ export function describeApi(server: ServerApi, createStorage: () => Promise<Test
       expect(
         (await call('GET', '/api/sources', undefined, { app: app1, token: tokens[0] })).status,
       ).toBe(200)
+    })
+
+    it('同一份数据库与环境变量的不同 platform 对象共用一次初始化（Workers 每个请求一个 platform）', async () => {
+      const env = { ...ENV, adminToken: undefined }
+      const a = server.bootstrap(makePlatform({ env }))
+      const b = server.bootstrap(makePlatform({ env, waitUntil: () => {} }))
+      expect(b).toBe(a)
+      await a
+      // 环境变量或数据库不同（如更换了 SECRET_KEY）时重新初始化
+      const otherEnv = server.bootstrap(makePlatform({ env: { ...env } }))
+      const otherDb = server.bootstrap(makePlatform({ env, db: (await createStorage()).db }))
+      expect(otherEnv).not.toBe(a)
+      expect(otherDb).not.toBe(a)
+      await Promise.all([otherEnv, otherDb])
     })
 
     it('设置了 ADMIN_TOKEN 时以它为准，不自动生成', async () => {
@@ -1220,17 +1235,74 @@ export function describeApi(server: ServerApi, createStorage: () => Promise<Test
         UPSTREAM_HEADERS['subscription-userinfo'],
       )
       expect(res.headers.get('x-subloom-target')).toBe('surge')
-
-      // 反向代理后面：按 X-Forwarded-Proto / X-Forwarded-Host 改写；缓存中不含该行
-      const proxied = await sub(output.path, {
-        headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'sub.mydomain.example' },
-      })
-      expect(proxied.text.split('\n')[0]).toBe(
-        `#!MANAGED-CONFIG https://sub.mydomain.example${output.path} interval=21600 strict=false`,
-      )
-      expect(proxied.text.split('\n').slice(1)).toEqual(rest)
+      // MANAGED-CONFIG 行在响应时添加，缓存中不含该行
       const cached = JSON.parse((await platform.blobs.get(`out:${output.id}:surge`)) ?? '{}')
       expect(cached.text).not.toContain('MANAGED-CONFIG')
+      expect(cached.text).toBe(rest.join('\n'))
+    })
+
+    describe('对外链接：PUBLIC_URL > TRUST_PROXY 时的 X-Forwarded-* > 请求的 Host', () => {
+      const FORWARDED = { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'proxy.example.net' }
+
+      /** 返回 Surge 配置首行和 provider 地址 */
+      async function links(env: Partial<Server.PlatformEnv>, headers: Record<string, string> = {}) {
+        const local = await createLocal()
+        const profile = await createProfile({ sourceIds: [local.id] })
+        const surge = await createOutput({ profileId: profile.id, target: 'surge' })
+        const mihomo = await createOutput({
+          profileId: profile.id,
+          target: 'mihomo',
+          options: { nodes: 'provider' },
+        })
+        const app1 = server.createApp(makePlatform({ env: { ...ENV, ...env } }))
+        const managed = (await sub(`${surge.path}?x=1`, { app: app1, headers })).text.split('\n')[0]
+        const provider = /url: (\S+\/proxies)/.exec(
+          (await sub(mihomo.path, { app: app1, headers })).text,
+        )?.[1]
+        const dto = (await call('GET', `/api/outputs/${surge.id}`, undefined, { app: app1 })).json
+          .output
+        return { managed, provider, url: dto.url, surge, mihomo }
+      }
+
+      it('都未设置：用请求的 Host，忽略 X-Forwarded-*', async () => {
+        const r = await links({}, FORWARDED)
+        expect(r.managed).toBe(
+          `#!MANAGED-CONFIG http://localhost${r.surge.path}?x=1 interval=21600 strict=false`,
+        )
+        expect(r.provider).toBe(`http://localhost${r.mihomo.path}/proxies`)
+        expect(r.url).toBeNull()
+      })
+
+      it('TRUST_PROXY=true：按 X-Forwarded-Proto / X-Forwarded-Host 改写', async () => {
+        const r = await links({ trustProxy: true }, FORWARDED)
+        expect(r.managed).toBe(
+          `#!MANAGED-CONFIG https://proxy.example.net${r.surge.path}?x=1 interval=21600 strict=false`,
+        )
+        expect(r.provider).toBe(`https://proxy.example.net${r.mihomo.path}/proxies`)
+        // 没有这两个头时仍用请求的 Host
+        const plain = await links({ trustProxy: true })
+        expect(plain.provider).toBe(`http://localhost${plain.mihomo.path}/proxies`)
+      })
+
+      it('TRUST_PROXY=true：不合法的头被忽略', async () => {
+        const r = await links(
+          { trustProxy: true },
+          { 'x-forwarded-proto': 'javascript', 'x-forwarded-host': 'evil.example/path' },
+        )
+        expect(r.provider).toBe(`http://localhost${r.mihomo.path}/proxies`)
+      })
+
+      it('PUBLIC_URL：优先于一切请求头，支持路径前缀；输出带完整的 url', async () => {
+        const r = await links(
+          { publicUrl: 'https://example.com/subloom', trustProxy: true },
+          FORWARDED,
+        )
+        expect(r.managed).toBe(
+          `#!MANAGED-CONFIG https://example.com/subloom${r.surge.path}?x=1 interval=21600 strict=false`,
+        )
+        expect(r.provider).toBe(`https://example.com/subloom${r.mihomo.path}/proxies`)
+        expect(r.url).toBe(`https://example.com/subloom${r.surge.path}`)
+      })
     })
 
     it('文件名中的特殊字符按 RFC 5987 编码', async () => {

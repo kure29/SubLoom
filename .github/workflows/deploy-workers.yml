@@ -1,0 +1,72 @@
+# 部署到 Cloudflare Workers。见 PLAN.md 第 6 节与 docs/deploy-workers.md。
+# 需要在仓库的 Secrets 中设置 CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID；没有设置时跳过（不报错）。
+# D1、KV 在首次部署时由 wrangler 自动创建；ADMIN_TOKEN、SECRET_KEY 由用户自己设置为 Worker 的 Secret，这里不接触。
+name: Deploy Workers
+
+on:
+  # main 分支上的 CI 成功后自动部署
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # 手动触发；fork 同步上游后也通过它触发（见 sync-upstream.yml）
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-workers
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check credentials
+    # 自动触发时只在 push 到 main 触发的 CI 成功后部署（不处理 PR 的 CI）
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          echo "enabled=$HAS_TOKEN" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set; skipping deployment."
+          fi
+
+  deploy:
+    name: wrangler deploy
+    needs: check
+    if: needs.check.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 自动触发时部署 CI 通过的那个提交
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # 版本取自 package.json 的 packageManager 字段
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # 构建全部包和前端静态文件（apps/web/dist，由 wrangler.jsonc 的 assets 引用）
+      - run: pnpm build
+
+      # 根目录的 wrangler.jsonc；凭据只在这一步通过环境变量传给 wrangler
+      - name: Deploy
+        run: pnpm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
