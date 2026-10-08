@@ -66,3 +66,4 @@ pnpm --filter @subloom/worker dev         # wrangler dev
 - 共用的依赖版本统一写在 `pnpm-workspace.yaml` 的 `catalog` 中，包内用 `"catalog:"` 引用。
 - Vitest 固定在 4.x：M5 需要的 `@cloudflare/vitest-pool-workers` 目前只支持 `vitest ^4.1`，升级前先确认兼容性。
 - 测试文件放在各包的 `test/` 目录，命名 `*.test.ts`；golden 测试数据放在 `packages/core/test/fixtures/<case>/`。
+- 工具链版本可能比你的训练数据新。修改 Turborepo 配置前先读已安装包内的文档（`node_modules/turbo/docs/`，见 `AGENTS.md`，该文件由 turbo 自动维护）；其他工具同理，以已安装版本的文档和 schema 为准。
