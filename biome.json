@@ -1,0 +1,94 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded"
+    }
+  },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      "security": {
+        "noGlobalEval": "error"
+      },
+      "nursery": {
+        "noImpliedEval": "error"
+      },
+      "style": {
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": {
+            "deniedGlobals": {
+              "Function": "禁止 new Function（Workers 不支持），见 CLAUDE.md 硬性约束。"
+            }
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "packages/*/src/**",
+        "packages/*/test/**",
+        "apps/web/src/**",
+        "apps/worker/src/**"
+      ],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          },
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Function": "禁止 new Function（Workers 不支持），见 CLAUDE.md 硬性约束。",
+                  "Buffer": "Node 专有 API，只能用于 apps/node。请改用 Uint8Array / TextEncoder / atob / btoa。",
+                  "process": "Node 专有 API，只能用于 apps/node。配置请通过 Platform.env 传入。",
+                  "global": "Node 专有 API，请改用 globalThis。",
+                  "require": "Node 专有 API，请使用 ESM import。",
+                  "__dirname": "Node 专有 API，只能用于 apps/node。",
+                  "__filename": "Node 专有 API，只能用于 apps/node。",
+                  "setImmediate": "Node 专有 API，请改用 setTimeout / queueMicrotask。"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/**", "apps/node/**", "apps/web/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["cloudflare:*"],
+                    "message": "Workers 专有模块只能用于 apps/worker。"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // 只暴露 Web 标准 API（fetch、crypto.subtle、TextEncoder、URL 等），不引入 @types/node
+    "lib": ["ES2023", "WebWorker"],
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}
