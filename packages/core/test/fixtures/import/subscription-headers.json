@@ -1,0 +1,6 @@
+{
+  "_comment": "Sample upstream response headers for M3/M4 (FAKE)",
+  "subscription-userinfo": "upload=1073741824; download=10737418240; total=107374182400; expire=1798732800",
+  "profile-update-interval": "24",
+  "content-disposition": "attachment; filename*=UTF-8''%E7%A4%BA%E4%BE%8B%E6%9C%BA%E5%9C%BA"
+}

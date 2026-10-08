@@ -1,0 +1,15 @@
+
+   ss://YWVzLTEyOC1nY206bGVnYWN5LXBhc3NAbGVnYWN5LmV4YW1wbGUuY29tOjgzODg=#Legacy%20SS   
+ss://YWVzLTI1Ni1nY206bm9uYW1l@noname.example.com:8388
+vmess://eyJ2IjogMiwgInBzIjogIlZNZXNzIOaVsOWtl+err+WPoyDml6BUTFMiLCAiYWRkIjogIjE5OC41MS4xMDAuMjAiLCAicG9ydCI6IDEwMDg2LCAiaWQiOiAiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDA2IiwgImFpZCI6IDAsICJuZXQiOiAidGNwIiwgInR5cGUiOiAibm9uZSIsICJ0bHMiOiAiIn0=
+vmess://this-is-not-base64!!!
+vless://00000000-0000-4000-8000-000000000007@plain.example.com:80?encryption=none&security=none&type=tcp#VLESS%20%E6%97%A0%E5%8A%A0%E5%AF%86
+hy2://fake-pass-hy2@hy2.example.com:443?sni=hy2.example.com&insecure=1#hy2%20%E5%88%AB%E5%90%8D%E5%8D%8F%E8%AE%AE
+hysteria2://fake-pass-hop@hop.example.com:20000-30000/?sni=hop.example.com#Port%20Hopping
+trojan://fake-pass-dup@dup.example.com:443?sni=dup.example.com#Duplicate%20Name
+trojan://fake-pass-dup2@dup2.example.com:443?sni=dup2.example.com#Duplicate%20Name
+tuic://00000000-0000-4000-8000-000000000008:fake-pass@tuic.example.com:443?congestion_control=bbr&alpn=h3#TUIC%20(M1%20unsupported)
+ssr://c3NyLmV4YW1wbGUuY29tOjQ0MzpvcmlnaW46YWVzLTI1Ni1jZmI6cGxhaW46Y0hj
+https://example.com/not-a-proxy
+random garbage line
+
