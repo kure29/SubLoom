@@ -23,6 +23,8 @@ export const sources = sqliteTable('sources', {
   lastStatus: text('last_status', { enum: ['ok', 'error'] }),
   lastError: text('last_error'),
   userinfoJson: text('userinfo_json'),
+  /** 节点缓存（src:<id>:nodes）的版本，即其中的 fetchedAt；从未成功时为 null */
+  nodesFetchedAt: integer('nodes_fetched_at'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 })

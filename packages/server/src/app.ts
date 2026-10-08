@@ -1,11 +1,17 @@
+import { settings } from '@subloom/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { backupRoutes } from './backup.js'
 import { bootstrap } from './bootstrap.js'
 import { sha256Hex, timingSafeEqual } from './crypto.js'
 import { errorBody, HttpError } from './errors.js'
+import { metaRoutes } from './meta.js'
+import { outputRoutes } from './outputs/routes.js'
 import type { Platform } from './platform.js'
+import { profileRoutes } from './profiles/routes.js'
 import { sourceRoutes } from './sources/routes.js'
 import type { Ctx } from './sources/service.js'
+import { subRoutes } from './sub/routes.js'
 
 export interface AppEnv {
   Variables: { ctx: Ctx }
@@ -43,7 +49,31 @@ export function createApp(platform: Platform) {
     await next()
   })
 
+  app.route('/api/meta', metaRoutes)
   app.route('/api/sources', sourceRoutes)
+  app.route('/api/profiles', profileRoutes)
+  app.route('/api/outputs', outputRoutes)
+  app.route('/api', backupRoutes)
+
+  // 公开接口：靠 token 访问，不需要管理令牌
+  app.use('/sub/*', async (c, next) => {
+    c.set('ctx', { platform, runtime: await bootstrap(platform) })
+    await next()
+  })
+  app.route('/sub', subRoutes)
+
+  // 健康检查：初始化（迁移）和数据库访问都正常时返回 ok；失败时不返回细节
+  app.get('/healthz', async (c) => {
+    try {
+      await bootstrap(platform)
+      await platform.db.select().from(settings).limit(1)
+      return c.json({ status: 'ok' })
+    } catch (e) {
+      console.error('[subloom] health check failed:', e instanceof Error ? e.message : String(e))
+      return c.json({ status: 'error' }, 503)
+    }
+  })
+
   app.notFound((c) => c.json(errorBody('NOT_FOUND', 'not found'), 404))
   return app
 }

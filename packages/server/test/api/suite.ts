@@ -1,5 +1,6 @@
 // 与运行时无关的 API 集成测试。packages/* 的测试不能使用 Node API（拿不到 better-sqlite3），
 // 因此这里只定义测试，由 apps/node/test（M5 起还有 apps/worker/test）传入各自的存储运行。见 PLAN.md 第 8 节。
+import { importSubscription } from '@subloom/core'
 import { fetchLogs, settings, sources } from '@subloom/db'
 // 只引用类型：用包名而不是相对路径，apps/* 运行本套件时按构建产物（.d.ts）检查类型，
 // 不会把 server 的源码按 Node 的类型环境再检查一遍（server 自己的 tsconfig.test.json 用 paths 指回 src）
@@ -15,7 +16,7 @@ import b64Subscription from '../../../core/test/fixtures/import/uri-mixed-b64/in
 
 export type ServerApi = Pick<typeof Server, 'createApp' | 'bootstrap' | 'runScheduledRefresh'>
 /** 各运行时提供的存储；env 与 resolveHost 由测试自己设置 */
-export type TestStorage = Pick<Server.Platform, 'db' | 'blobs' | 'waitUntil'>
+export type TestStorage = Pick<Server.Platform, 'name' | 'db' | 'blobs' | 'waitUntil'>
 
 const { _comment, ...UPSTREAM_HEADERS } = upstreamHeaders
 const USERINFO = {
@@ -49,6 +50,11 @@ interface Body {
   fetchedAt: number
   proxies: Array<{ name: string; type: string }>
   logs: Server.FetchLogDto[]
+  profile: Server.ProfileDto
+  profiles: Server.ProfileSummaryDto[]
+  output: Server.OutputDto
+  outputs: Server.OutputDto[]
+  restored: { sources: number; profiles: number; outputs: number }
 }
 
 export function describeApi(server: ServerApi, createStorage: () => Promise<TestStorage>) {
@@ -56,6 +62,8 @@ export function describeApi(server: ServerApi, createStorage: () => Promise<Test
   let platform: Server.Platform
   let app: ReturnType<ServerApi['createApp']>
   let consoleSpies: MockInstance[]
+  /** 测试中出现过的全部输出 token，日志中不得出现完整 token */
+  let tokens: string[]
 
   function makePlatform(overrides: Partial<Server.Platform> = {}): Server.Platform {
     return { ...storage, env: ENV, resolveHost: vi.fn(publicDns), ...overrides }
@@ -65,6 +73,7 @@ export function describeApi(server: ServerApi, createStorage: () => Promise<Test
     storage = await createStorage()
     platform = makePlatform()
     app = server.createApp(platform)
+    tokens = []
     consoleSpies = (['log', 'info', 'warn', 'error'] as const).map((m) =>
       vi.spyOn(console, m).mockImplementation(() => {}),
     )
@@ -73,7 +82,11 @@ export function describeApi(server: ServerApi, createStorage: () => Promise<Test
   afterEach(() => {
     // 日志脱敏：任何日志中都不能出现订阅 URL 中的 token（测试中为 CANARY）
     for (const spy of consoleSpies) {
-      for (const args of spy.mock.calls) expect(args.map(String).join(' ')).not.toContain('CANARY')
+      for (const args of spy.mock.calls) {
+        const line = args.map(String).join(' ')
+        expect(line).not.toContain('CANARY')
+        for (const token of tokens) expect(line).not.toContain(token)
+      }
     }
     vi.restoreAllMocks()
     vi.useRealTimers()
@@ -101,11 +114,10 @@ export function describeApi(server: ServerApi, createStorage: () => Promise<Test
       body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
     })
     const text = await res.text()
-    return {
-      status: res.status,
-      json: text ? (JSON.parse(text) as Body) : ({} as Body),
-      headers: res.headers,
-    }
+    const json = text ? (JSON.parse(text) as Body) : ({} as Body)
+    if (json.output?.token) tokens.push(json.output.token)
+    for (const o of Array.isArray(json.outputs) ? json.outputs : []) tokens.push(o.token)
+    return { status: res.status, json, headers: res.headers }
   }
 
   /** mock 上游：每次请求调用 handler */
@@ -710,6 +722,953 @@ export function describeApi(server: ServerApi, createStorage: () => Promise<Test
       const r = await server.runScheduledRefresh(makePlatform({ blobs }))
       expect(r).toEqual({ refreshed: 1, failed: 1 })
       expect((await call('GET', `/api/sources/${ok.id}`)).json.source.lastStatus).toBe('ok')
+    })
+  })
+
+  // ---------------------------------------------------------------- M4
+
+  describe('/api/meta 与 /healthz', () => {
+    it('meta：版本、运行平台、密钥来源、已实现导出器的能力矩阵', async () => {
+      expect((await call('GET', '/api/meta', undefined, { token: null })).status).toBe(401)
+      const res = await call('GET', '/api/meta')
+      expect(res.status).toBe(200)
+      const meta = res.json as unknown as Server.MetaDto
+      expect(meta).toMatchObject({
+        name: 'subloom',
+        version: expect.any(String),
+        coreVersion: expect.any(String),
+        platform: storage.name,
+        secretKeySource: 'env',
+      })
+      expect(Object.keys(meta.targets).sort()).toEqual(['mihomo', 'surge'])
+      expect(meta.targets.surge?.proxyTypes).not.toContain('vless')
+      expect(meta.targets.mihomo?.ruleSetProxy).toBe(true)
+    })
+
+    it('meta：未设置 SECRET_KEY 时密钥来源为 generated（重启后不变）', async () => {
+      const env = { ...ENV, secretKey: undefined }
+      for (let i = 0; i < 2; i++) {
+        const app1 = server.createApp(makePlatform({ env }))
+        const res = await call('GET', '/api/meta', undefined, { app: app1 })
+        expect((res.json as unknown as Server.MetaDto).secretKeySource).toBe('generated')
+      }
+    })
+
+    it('healthz：无需认证；初始化或数据库访问失败时返回 503，不含细节', async () => {
+      const ok = await call('GET', '/healthz', undefined, { token: null })
+      expect(ok.status).toBe(200)
+      expect(ok.json).toEqual({ status: 'ok' })
+
+      const broken = server.createApp(makePlatform({ db: {} as Server.Platform['db'] }))
+      const res = await call('GET', '/healthz', undefined, { token: null, app: broken })
+      expect(res.status).toBe(503)
+      expect(res.json).toEqual({ status: 'error' })
+    })
+  })
+
+  /** 带两个分组和兜底规则的最小 profile */
+  const IR = {
+    version: 1,
+    name: '我的配置',
+    proxies: [],
+    groups: [
+      {
+        name: 'Proxy',
+        type: 'select',
+        members: [{ kind: 'builtin', name: 'DIRECT' }],
+        includeAllProxies: true,
+      },
+    ],
+    rules: [{ type: 'MATCH', target: 'Proxy' }],
+    ruleSets: [],
+  }
+
+  async function createProfile(body: Record<string, unknown> = {}): Promise<Server.ProfileDto> {
+    const res = await call('POST', '/api/profiles', { ir: IR, ...body })
+    expect(res.status, JSON.stringify(res.json)).toBe(201)
+    return res.json.profile
+  }
+
+  async function createOutput(body: Record<string, unknown>): Promise<Server.OutputDto> {
+    const res = await call('POST', '/api/outputs', body)
+    expect(res.status, JSON.stringify(res.json)).toBe(201)
+    return res.json.output
+  }
+
+  async function createLocal(content = uriSubscription, name = '本地'): Promise<Server.SourceDto> {
+    const res = await call('POST', '/api/sources', { name, kind: 'local', content })
+    expect(res.status).toBe(201)
+    return res.json.source
+  }
+
+  /** 请求公开接口（不带管理令牌） */
+  async function sub(
+    path: string,
+    opts: { ua?: string; headers?: Record<string, string>; app?: typeof app } = {},
+  ) {
+    const headers: Record<string, string> = { ...opts.headers }
+    if (opts.ua !== undefined) headers['user-agent'] = opts.ua
+    const res = await (opts.app ?? app).request(path, { headers })
+    return { status: res.status, text: await res.text(), headers: res.headers }
+  }
+
+  const proxyNames = (text: string) => importSubscription(text).proxies.map((p) => p.name)
+
+  describe('profiles', () => {
+    it('增删改查：name 取自 IR，列表不返回 ir 和 pipeline', async () => {
+      const source = await createLocal()
+      const created = await createProfile({ sourceIds: [source.id] })
+      expect(created).toMatchObject({
+        name: '我的配置',
+        ir: IR,
+        pipeline: [],
+        sourceIds: [source.id],
+      })
+      expect(created.id).toEqual(expect.any(String))
+      expect(created.createdAt).toEqual(expect.any(Number))
+
+      const list = await call('GET', '/api/profiles')
+      expect(list.status).toBe(200)
+      expect(list.json.profiles).toEqual([
+        {
+          id: created.id,
+          name: '我的配置',
+          sourceIds: [source.id],
+          createdAt: created.createdAt,
+          updatedAt: created.updatedAt,
+        },
+      ])
+      expect((await call('GET', `/api/profiles/${created.id}`)).json.profile).toEqual(created)
+
+      const pipeline = [{ op: 'prefix', text: 'A-' }]
+      const patched = await call('PATCH', `/api/profiles/${created.id}`, {
+        ir: { ...IR, name: '改名' },
+        pipeline,
+        sourceIds: [],
+      })
+      expect(patched.status).toBe(200)
+      expect(patched.json.profile).toMatchObject({ name: '改名', pipeline, sourceIds: [] })
+      expect(patched.json.profile.updatedAt).toBeGreaterThanOrEqual(created.updatedAt)
+      expect((await call('GET', '/api/profiles')).json.profiles[0]?.name).toBe('改名')
+
+      expect((await call('DELETE', `/api/profiles/${created.id}`)).status).toBe(204)
+      expect((await call('GET', `/api/profiles/${created.id}`)).status).toBe(404)
+      expect((await call('GET', '/api/profiles')).json.profiles).toEqual([])
+    })
+
+    it('请求体不合法时返回 400，不写入', async () => {
+      const source = await createLocal()
+      const bad = [
+        '{not json',
+        {},
+        { ir: { ...IR, groups: undefined } },
+        { ir: { ...IR, version: 2 } },
+        { ir: IR, pipeline: [{ op: 'nope' }] },
+        { ir: IR, sourceIds: ['missing'] },
+        { ir: IR, sourceIds: [source.id, source.id] },
+        { ir: IR, other: 1 },
+      ]
+      for (const body of bad) {
+        const res = await call('POST', '/api/profiles', body)
+        expect(res.status, JSON.stringify(body)).toBe(400)
+        expect(res.json.error.code).toBe('INVALID_REQUEST')
+      }
+      expect((await call('GET', '/api/profiles')).json.profiles).toEqual([])
+
+      const profile = await createProfile()
+      for (const body of [{ ir: { name: 'x' } }, { sourceIds: ['missing'] }, { id: 'x' }]) {
+        const res = await call('PATCH', `/api/profiles/${profile.id}`, body)
+        expect(res.status, JSON.stringify(body)).toBe(400)
+      }
+      expect((await call('GET', `/api/profiles/${profile.id}`)).json.profile).toEqual(profile)
+    })
+
+    it('不存在的 profile 返回 404', async () => {
+      for (const [method, path] of [
+        ['GET', '/api/profiles/nope'],
+        ['PATCH', '/api/profiles/nope'],
+        ['DELETE', '/api/profiles/nope'],
+        ['POST', '/api/profiles/nope/preview?target=mihomo'],
+      ] as const) {
+        const res = await call(method, path, method === 'PATCH' ? { pipeline: [] } : undefined)
+        expect(res.status, `${method} ${path}`).toBe(404)
+        expect(res.json.error.code).toBe('NOT_FOUND')
+      }
+    })
+
+    it('删除订阅源时从 profile 的 sourceIds 中移除', async () => {
+      const a = await createLocal(uriSubscription, 'a')
+      const b = await createLocal(yamlSubscription, 'b')
+      const profile = await createProfile({ sourceIds: [a.id, b.id] })
+      await call('DELETE', `/api/sources/${a.id}`)
+      expect((await call('GET', `/api/profiles/${profile.id}`)).json.profile.sourceIds).toEqual([
+        b.id,
+      ])
+    })
+
+    it('删除 profile 时同时删除它的输出和生成结果缓存', async () => {
+      const profile = await createProfile()
+      const output = await createOutput({ profileId: profile.id, target: 'mihomo' })
+      expect((await sub(output.path)).status).toBe(200)
+      expect(await platform.blobs.get(`out:${output.id}:mihomo`)).not.toBeNull()
+
+      await call('DELETE', `/api/profiles/${profile.id}`)
+      expect((await call('GET', `/api/outputs/${output.id}`)).status).toBe(404)
+      expect((await sub(output.path)).status).toBe(404)
+      expect(await platform.blobs.get(`out:${output.id}:mihomo`)).toBeNull()
+    })
+  })
+
+  describe('preview', () => {
+    it('按 sourceIds 顺序拼接节点缓存 → 流水线 → 导出；没有缓存的订阅源跳过', async () => {
+      const a = await createLocal(uriSubscription, 'a')
+      const b = await createLocal(yamlSubscription, 'b')
+      const never = await createRemote()
+      const profile = await createProfile({
+        sourceIds: [b.id, never.id, a.id],
+        pipeline: [
+          { op: 'filter-regex', pattern: '[', mode: 'keep' },
+          { op: 'prefix', text: 'P-' },
+        ],
+      })
+
+      const res = await call('POST', `/api/profiles/${profile.id}/preview?target=mihomo`)
+      expect(res.status).toBe(200)
+      const preview = res.json as unknown as Server.PreviewResult
+      const names = proxyNames(preview.text)
+      expect(names).toHaveLength(15 + URI_NODES)
+      expect(names.every((n) => n.startsWith('P-'))).toBe(true)
+      expect(names.slice(0, 15)).toEqual(
+        importSubscription(yamlSubscription).proxies.map((p) => `P-${p.name}`),
+      )
+      expect(preview.sources).toEqual([
+        { id: b.id, nodeCount: 15 },
+        { id: never.id, nodeCount: null },
+        { id: a.id, nodeCount: URI_NODES },
+      ])
+      // 非法正则：跳过该操作并警告
+      expect(preview.pipelineWarnings).toEqual([
+        expect.objectContaining({ code: 'INVALID_REGEX', path: 'pipeline[0]' }),
+      ])
+      expect(preview.warnings).toEqual(expect.any(Array))
+
+      const surge = await call('POST', `/api/profiles/${profile.id}/preview?target=surge`)
+      expect(surge.status).toBe(200)
+      const surgePreview = surge.json as unknown as Server.PreviewResult
+      expect(surgePreview.text).toContain('[Proxy]')
+      expect(surgePreview.text).not.toContain('#!MANAGED-CONFIG')
+      // Surge 不支持 vless 等：有降级警告
+      expect(surgePreview.warnings.map((w) => w.code)).toContain('UNSUPPORTED_PROXY_TYPE')
+    })
+
+    it('请求体覆盖已保存的值（预览未保存的编辑），不写入', async () => {
+      const a = await createLocal()
+      const profile = await createProfile()
+      const res = await call('POST', `/api/profiles/${profile.id}/preview?target=mihomo`, {
+        ir: { ...IR, name: '未保存' },
+        sourceIds: [a.id],
+        pipeline: [{ op: 'suffix', text: '-S' }],
+        options: { defaultUdp: false },
+      })
+      expect(res.status).toBe(200)
+      const { text } = res.json as unknown as Server.PreviewResult
+      const proxies = importSubscription(text).proxies
+      expect(proxies).toHaveLength(URI_NODES)
+      expect(proxies.every((p) => p.name.endsWith('-S'))).toBe(true)
+      // URI 节点没有 udp 信息，按 defaultUdp
+      expect(proxies.every((p) => p.udp === false)).toBe(true)
+      expect((await call('GET', `/api/profiles/${profile.id}`)).json.profile).toEqual(profile)
+    })
+
+    it('target 和请求体不合法时返回 400', async () => {
+      const profile = await createProfile()
+      for (const query of ['', '?target=', '?target=loon', '?target=auto', '?target=proxies']) {
+        const res = await call('POST', `/api/profiles/${profile.id}/preview${query}`)
+        expect(res.status, query).toBe(400)
+        expect(res.json.error.code).toBe('INVALID_REQUEST')
+      }
+      for (const body of [
+        '{not json',
+        { options: { proxyProvider: { name: 'x', url: 'https://x.example.com/' } } },
+        { sourceIds: ['missing'] },
+        { other: 1 },
+      ]) {
+        const res = await call('POST', `/api/profiles/${profile.id}/preview?target=mihomo`, body)
+        expect(res.status, JSON.stringify(body)).toBe(400)
+      }
+    })
+  })
+
+  describe('outputs', () => {
+    it('增删改查：token 为 32 字节 base64url，path 为 /sub/<token>', async () => {
+      const p1 = await createProfile()
+      const p2 = await createProfile()
+      const a = await createOutput({ profileId: p1.id, target: 'mihomo' })
+      expect(a).toMatchObject({
+        profileId: p1.id,
+        target: 'mihomo',
+        options: {},
+        lastAccessAt: null,
+      })
+      expect(a.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      expect(a.path).toBe(`/sub/${a.token}`)
+      const b = await createOutput({
+        profileId: p2.id,
+        target: 'auto',
+        options: { export: { defaultUdp: false }, nodes: 'provider' },
+      })
+      expect(b.options).toEqual({ export: { defaultUdp: false }, nodes: 'provider' })
+      expect(b.token).not.toBe(a.token)
+
+      const list = await call('GET', '/api/outputs')
+      expect(list.json.outputs.map((o) => o.id).sort()).toEqual([a.id, b.id].sort())
+      const filtered = await call('GET', `/api/outputs?profileId=${p2.id}`)
+      expect(filtered.json.outputs).toEqual([b])
+      expect((await call('GET', `/api/outputs/${a.id}`)).json.output).toEqual(a)
+
+      const patched = await call('PATCH', `/api/outputs/${a.id}`, {
+        target: 'surge',
+        options: { export: { ruleSetMirror: 'jsdelivr' } },
+      })
+      expect(patched.status).toBe(200)
+      expect(patched.json.output).toEqual({
+        ...a,
+        target: 'surge',
+        options: { export: { ruleSetMirror: 'jsdelivr' } },
+      })
+
+      expect((await call('DELETE', `/api/outputs/${a.id}`)).status).toBe(204)
+      expect((await call('GET', `/api/outputs/${a.id}`)).status).toBe(404)
+      expect((await sub(a.path)).status).toBe(404)
+    })
+
+    it('请求体不合法时返回 400；shadowrocket、loon 的导出器尚未实现', async () => {
+      const profile = await createProfile()
+      for (const body of [
+        '{not json',
+        { profileId: profile.id },
+        { profileId: 'missing', target: 'mihomo' },
+        { profileId: profile.id, target: 'shadowrocket' },
+        { profileId: profile.id, target: 'loon' },
+        { profileId: profile.id, target: 'clash' },
+        { profileId: profile.id, target: 'mihomo', options: { nodes: 'remote' } },
+        { profileId: profile.id, target: 'mihomo', options: { export: { defaultUdp: 1 } } },
+        {
+          profileId: profile.id,
+          target: 'mihomo',
+          options: { export: { proxyProvider: { name: 'x', url: 'https://x.example.com/' } } },
+        },
+        { profileId: profile.id, target: 'mihomo', token: 'chosen-token' },
+      ]) {
+        const res = await call('POST', '/api/outputs', body)
+        expect(res.status, JSON.stringify(body)).toBe(400)
+        expect(res.json.error.code).toBe('INVALID_REQUEST')
+      }
+      const rejected = await call('POST', '/api/outputs', { profileId: profile.id, target: 'loon' })
+      expect(rejected.json.error.message).toMatch(/not implemented/)
+      expect((await call('GET', '/api/outputs')).json.outputs).toEqual([])
+
+      const output = await createOutput({ profileId: profile.id, target: 'mihomo' })
+      for (const body of [{ target: 'loon' }, { profileId: profile.id }, { token: 'x' }]) {
+        expect((await call('PATCH', `/api/outputs/${output.id}`, body)).status).toBe(400)
+      }
+    })
+
+    it('不存在的输出返回 404', async () => {
+      for (const [method, path] of [
+        ['GET', '/api/outputs/nope'],
+        ['PATCH', '/api/outputs/nope'],
+        ['DELETE', '/api/outputs/nope'],
+        ['POST', '/api/outputs/nope/rotate'],
+      ] as const) {
+        const res = await call(method, path, method === 'PATCH' ? { target: 'surge' } : undefined)
+        expect(res.status, `${method} ${path}`).toBe(404)
+        expect(res.json.error.code).toBe('NOT_FOUND')
+      }
+    })
+
+    it('rotate：生成新 token，旧链接立即失效，清除生成结果缓存', async () => {
+      const profile = await createProfile()
+      const output = await createOutput({ profileId: profile.id, target: 'mihomo' })
+      expect((await sub(output.path)).status).toBe(200)
+      expect(await platform.blobs.get(`out:${output.id}:mihomo`)).not.toBeNull()
+
+      const res = await call('POST', `/api/outputs/${output.id}/rotate`)
+      expect(res.status).toBe(200)
+      const rotated = res.json.output
+      expect(rotated).toMatchObject({ id: output.id, profileId: profile.id, target: 'mihomo' })
+      expect(rotated.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      expect(rotated.token).not.toBe(output.token)
+      expect(rotated.path).toBe(`/sub/${rotated.token}`)
+      expect(await platform.blobs.get(`out:${output.id}:mihomo`)).toBeNull()
+
+      expect((await sub(output.path)).status).toBe(404)
+      expect((await sub(rotated.path)).status).toBe(200)
+    })
+  })
+
+  describe('/sub/:token', () => {
+    const SUB_URL_B = 'https://sub-b.example.com/link?token=CANARY'
+    const SUB_URL_C = 'https://sub-c.example.com/link?token=CANARY'
+
+    /** 三个远程订阅：A 有 userinfo，B 的 userinfo 不同，C 没有该头 */
+    function multiUpstream() {
+      return upstream((url) => {
+        if (url.startsWith('https://sub-b.')) {
+          return new Response(yamlSubscription, {
+            headers: {
+              'subscription-userinfo': 'upload=2; download=3; total=1000; expire=1700000000',
+            },
+          })
+        }
+        if (url.startsWith('https://sub-c.')) return new Response(uriSubscription)
+        return new Response(b64Subscription, { headers: UPSTREAM_HEADERS })
+      })
+    }
+
+    async function refreshed(extra: Record<string, unknown> = {}) {
+      const source = await createRemote(extra)
+      expect((await call('POST', `/api/sources/${source.id}/refresh`)).status).toBe(200)
+      return source
+    }
+
+    it('不存在的 token 返回 404，无需管理令牌', async () => {
+      const res = await sub('/sub/nope')
+      expect(res.status).toBe(404)
+      expect((await sub('/sub/nope/proxies')).status).toBe(404)
+    })
+
+    it('mihomo：配置内容与全部响应头', async () => {
+      multiUpstream()
+      const a = await refreshed({ ttlSec: 7200 })
+      const b = await refreshed({ url: SUB_URL_B, ttlSec: 3 * 3600 })
+      const c = await refreshed({ url: SUB_URL_C })
+      const local = await createLocal()
+      const profile = await createProfile({
+        sourceIds: [a.id, b.id, c.id, local.id],
+        pipeline: [{ op: 'dedupe', by: 'name' }],
+      })
+      const output = await createOutput({ profileId: profile.id, target: 'mihomo' })
+
+      const res = await sub(output.path, { ua: 'clash-verge/v2.0.3' })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8')
+      expect(res.headers.get('content-disposition')).toBe(
+        `attachment; filename*=UTF-8''${encodeURIComponent('我的配置')}.yaml`,
+      )
+      // 远程订阅 ttlSec 的最小值（2 小时）
+      expect(res.headers.get('profile-update-interval')).toBe('2')
+      // A + B 求和，expire 取最早；C（没有该头）和本地订阅不参与
+      expect(res.headers.get('subscription-userinfo')).toBe(
+        `upload=${USERINFO.upload + 2}; download=${USERINFO.download + 3}; total=${USERINFO.total + 1000}; expire=1700000000`,
+      )
+      expect(res.headers.get('x-subloom-target')).toBe('mihomo')
+      expect(res.headers.get('x-subloom-fallback')).toBeNull()
+
+      const imported = importSubscription(res.text)
+      expect(imported.format).toBe('mihomo-yaml')
+      // 按名称去重：C、本地与 A 的节点相同
+      const unique = new Set(
+        [uriSubscription, yamlSubscription].flatMap((t) =>
+          importSubscription(t).proxies.map((p) => p.name),
+        ),
+      )
+      expect(imported.proxies.map((p) => p.name).sort()).toEqual([...unique].sort())
+      expect(imported.config?.groups?.[0]?.name).toBe('Proxy')
+
+      const after = await call('GET', `/api/outputs/${output.id}`)
+      expect(after.json.output.lastAccessAt).toEqual(expect.any(Number))
+    })
+
+    it('没有任何来源有流量信息时不返回 subscription-userinfo；没有远程订阅时更新间隔为 6 小时', async () => {
+      const local = await createLocal()
+      const profile = await createProfile({ sourceIds: [local.id] })
+      const output = await createOutput({ profileId: profile.id, target: 'mihomo' })
+      const res = await sub(output.path)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('subscription-userinfo')).toBeNull()
+      expect(res.headers.get('profile-update-interval')).toBe('6')
+      expect(proxyNames(res.text)).toHaveLength(URI_NODES)
+    })
+
+    it('订阅源还没有节点缓存时照常生成（只含手动节点）', async () => {
+      const never = await createRemote()
+      const profile = await createProfile({ sourceIds: [never.id] })
+      const output = await createOutput({ profileId: profile.id, target: 'mihomo' })
+      const res = await sub(output.path)
+      expect(res.status).toBe(200)
+      expect(proxyNames(res.text)).toEqual([])
+    })
+
+    it('Surge：首行 MANAGED-CONFIG（当前 URL，间隔为秒），文件名为 .conf', async () => {
+      multiUpstream()
+      const a = await refreshed()
+      const profile = await createProfile({ sourceIds: [a.id] })
+      const output = await createOutput({ profileId: profile.id, target: 'surge' })
+
+      const res = await sub(output.path, { ua: 'Surge iOS/3083' })
+      expect(res.status).toBe(200)
+      const [first, ...rest] = res.text.split('\n')
+      expect(first).toBe(
+        `#!MANAGED-CONFIG http://localhost${output.path} interval=21600 strict=false`,
+      )
+      expect(rest.join('\n')).toContain('[Proxy]')
+      expect(res.headers.get('content-disposition')).toBe(
+        `attachment; filename*=UTF-8''${encodeURIComponent('我的配置')}.conf`,
+      )
+      expect(res.headers.get('subscription-userinfo')).toBe(
+        UPSTREAM_HEADERS['subscription-userinfo'],
+      )
+      expect(res.headers.get('x-subloom-target')).toBe('surge')
+
+      // 反向代理后面：按 X-Forwarded-Proto / X-Forwarded-Host 改写；缓存中不含该行
+      const proxied = await sub(output.path, {
+        headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'sub.mydomain.example' },
+      })
+      expect(proxied.text.split('\n')[0]).toBe(
+        `#!MANAGED-CONFIG https://sub.mydomain.example${output.path} interval=21600 strict=false`,
+      )
+      expect(proxied.text.split('\n').slice(1)).toEqual(rest)
+      const cached = JSON.parse((await platform.blobs.get(`out:${output.id}:surge`)) ?? '{}')
+      expect(cached.text).not.toContain('MANAGED-CONFIG')
+    })
+
+    it('文件名中的特殊字符按 RFC 5987 编码', async () => {
+      const profile = await createProfile({ ir: { ...IR, name: "Bob's (main) *config*" } })
+      const output = await createOutput({ profileId: profile.id, target: 'mihomo' })
+      expect((await sub(output.path)).headers.get('content-disposition')).toBe(
+        "attachment; filename*=UTF-8''Bob%27s%20%28main%29%20%2Aconfig%2A.yaml",
+      )
+    })
+
+    describe('target=auto 按 User-Agent 识别', () => {
+      const cases: Array<[ua: string | undefined, target: string, fallback: string | null]> = [
+        ['Surge Mac/2735', 'surge', null],
+        ['clash-verge/v2.0.3', 'mihomo', null],
+        ['Stash/2.4.6 Clash/1.9.0', 'mihomo', null],
+        ['Shadowrocket/2070 CFNetwork/1410.0.3 Darwin/22.6.0', 'mihomo', 'shadowrocket'],
+        ['Loon/797 CFNetwork/1410.0.3 Darwin/22.6.0', 'mihomo', 'loon'],
+        ['Mozilla/5.0', 'mihomo', null],
+        [undefined, 'mihomo', null],
+      ]
+
+      it.each(cases)('%s → %s', async (ua, target, fallback) => {
+        const profile = await createProfile()
+        const output = await createOutput({ profileId: profile.id, target: 'auto' })
+        const res = await sub(output.path, { ua })
+        expect(res.status).toBe(200)
+        expect(res.headers.get('x-subloom-target')).toBe(target)
+        expect(res.headers.get('x-subloom-fallback')).toBe(fallback)
+        expect(res.text.startsWith('#!MANAGED-CONFIG')).toBe(target === 'surge')
+        expect(await platform.blobs.get(`out:${output.id}:${target}`)).not.toBeNull()
+      })
+
+      it('回退时记一条 info 日志，其中只有 token 的前 4 个字符', async () => {
+        const profile = await createProfile()
+        const output = await createOutput({ profileId: profile.id, target: 'auto' })
+        await sub(output.path, { ua: 'Shadowrocket/2070' })
+        const logs = printed()
+        expect(logs).toContain(`${output.token.slice(0, 4)}…`)
+        expect(logs).toMatch(/shadowrocket/i)
+        // 完整 token 不出现在日志中：由 afterEach 检查
+      })
+    })
+
+    describe('生成结果缓存', () => {
+      /** 收集 waitUntil 的后台任务，测试中手动等待 */
+      function deferredPlatform() {
+        const pending: Array<Promise<unknown>> = []
+        const p = makePlatform({ waitUntil: (task) => void pending.push(task) })
+        return { app: server.createApp(p), pending }
+      }
+
+      async function setup(options?: Record<string, unknown>) {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(1_800_000_000_000)
+        okUpstream()
+        const a = await refreshed()
+        const profile = await createProfile({ sourceIds: [a.id] })
+        const output = await createOutput({ profileId: profile.id, target: 'mihomo', options })
+        return { a, profile, output, ...deferredPlatform() }
+      }
+
+      /** 订阅刷新出新的节点（15 个），节点缓存版本变化 */
+      async function nodesChange(sourceId: string) {
+        vi.setSystemTime(1_800_000_100_000)
+        okUpstream(yamlSubscription)
+        expect((await call('POST', `/api/sources/${sourceId}/refresh`)).json.nodeCount).toBe(15)
+      }
+
+      it('缓存命中时直接返回缓存内容，不重新生成', async () => {
+        const { output, app: app1, pending } = await setup()
+        const first = await sub(output.path, { app: app1 })
+        expect(proxyNames(first.text)).toHaveLength(URI_NODES)
+
+        const key = `out:${output.id}:mihomo`
+        const entry = JSON.parse((await platform.blobs.get(key)) ?? 'null')
+        expect(entry).toMatchObject({
+          configKey: expect.stringMatching(/^[0-9a-f]{64}$/),
+          nodesKey: expect.stringMatching(/^[0-9a-f]{64}$/),
+          text: first.text,
+          generatedAt: 1_800_000_000_000,
+        })
+        await platform.blobs.put(key, JSON.stringify({ ...entry, text: 'proxies: []\n# cached\n' }))
+        expect((await sub(output.path, { app: app1 })).text).toBe('proxies: []\n# cached\n')
+        expect(pending).toEqual([])
+      })
+
+      it('节点变化：先返回旧结果，后台重新生成（stale-while-revalidate）', async () => {
+        const { a, output, app: app1, pending } = await setup()
+        await sub(output.path, { app: app1 })
+        await nodesChange(a.id)
+
+        const stale = await sub(output.path, { app: app1 })
+        expect(proxyNames(stale.text)).toHaveLength(URI_NODES)
+        expect(pending).toHaveLength(1)
+        // 后台任务完成前的并发请求不会再启动一个
+        await sub(output.path, { app: app1 })
+        expect(pending).toHaveLength(1)
+        await Promise.all(pending)
+
+        const fresh = await sub(output.path, { app: app1 })
+        expect(proxyNames(fresh.text)).toHaveLength(15)
+        expect(pending).toHaveLength(1)
+      })
+
+      it('profile 变化：同步重新生成', async () => {
+        const { profile, output, app: app1, pending } = await setup()
+        await sub(output.path, { app: app1 })
+        await call('PATCH', `/api/profiles/${profile.id}`, {
+          pipeline: [{ op: 'prefix', text: 'NEW-' }],
+        })
+        const res = await sub(output.path, { app: app1 })
+        expect(proxyNames(res.text).every((n) => n.startsWith('NEW-'))).toBe(true)
+        expect(pending).toEqual([])
+      })
+
+      it('导出选项变化：同步重新生成', async () => {
+        const { output, app: app1, pending } = await setup()
+        await sub(output.path, { app: app1 })
+        await call('PATCH', `/api/outputs/${output.id}`, {
+          options: { export: { defaultUdp: false } },
+        })
+        const res = await sub(output.path, { app: app1 })
+        expect(importSubscription(res.text).proxies.every((p) => p.udp === false)).toBe(true)
+        expect(pending).toEqual([])
+      })
+
+      it('configKey 不同（如升级了 core）：同步重新生成，即使节点也变了', async () => {
+        const { a, output, app: app1, pending } = await setup()
+        await sub(output.path, { app: app1 })
+        const key = `out:${output.id}:mihomo`
+        const entry = JSON.parse((await platform.blobs.get(key)) ?? 'null')
+        await platform.blobs.put(
+          key,
+          JSON.stringify({ ...entry, configKey: 'old-core', text: 'proxies: []\n# old\n' }),
+        )
+        await nodesChange(a.id)
+        const res = await sub(output.path, { app: app1 })
+        expect(proxyNames(res.text)).toHaveLength(15)
+        expect(pending).toEqual([])
+      })
+
+      it('后台重新生成失败时记录日志（不含完整 token），旧结果仍然可用', async () => {
+        const { a, output, pending } = await setup()
+        await sub(output.path)
+        await nodesChange(a.id)
+        const blobs: Server.BlobStore = {
+          ...storage.blobs,
+          put: async (key, value, opts) => {
+            if (key.startsWith('out:')) throw new Error('disk full')
+            return storage.blobs.put(key, value, opts)
+          },
+        }
+        const failing = server.createApp(
+          makePlatform({ blobs, waitUntil: (task) => void pending.push(task) }),
+        )
+        const res = await sub(output.path, { app: failing })
+        expect(proxyNames(res.text)).toHaveLength(URI_NODES)
+        await Promise.allSettled(pending)
+        expect(printed()).toContain(`${output.token.slice(0, 4)}…`)
+        expect(proxyNames((await sub(output.path, { app: failing })).text)).toHaveLength(URI_NODES)
+        // 上一次失败后不再占用：再次请求时重新尝试
+        expect(pending).toHaveLength(2)
+        await Promise.allSettled(pending)
+      })
+    })
+
+    describe("nodes: 'provider'", () => {
+      it('mihomo 配置通过 proxy-providers 引用 /sub/:token/proxies', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(1_800_000_000_000)
+        okUpstream()
+        const a = await refreshed({ ttlSec: 3600 })
+        const profile = await createProfile({
+          sourceIds: [a.id],
+          pipeline: [{ op: 'prefix', text: 'P-' }],
+        })
+        const output = await createOutput({
+          profileId: profile.id,
+          target: 'mihomo',
+          options: { nodes: 'provider' },
+        })
+        const pending: Array<Promise<unknown>> = []
+        const app1 = server.createApp(
+          makePlatform({ waitUntil: (task) => void pending.push(task) }),
+        )
+
+        const res = await sub(output.path, { app: app1 })
+        expect(res.status).toBe(200)
+        expect(proxyNames(res.text)).toEqual([])
+        expect(res.text).toContain(
+          `proxy-providers:\n  subloom:\n    type: http\n    url: http://localhost${output.path}/proxies\n    interval: 3600\n`,
+        )
+        expect(res.text).toMatch(/use:\n {6}- subloom\n/)
+        expect(res.headers.get('subscription-userinfo')).toBe(
+          UPSTREAM_HEADERS['subscription-userinfo'],
+        )
+
+        const nodes = await sub(`${output.path}/proxies`, { app: app1 })
+        expect(nodes.status).toBe(200)
+        expect(nodes.headers.get('content-type')).toBe('text/plain; charset=utf-8')
+        expect(nodes.headers.get('subscription-userinfo')).toBe(
+          UPSTREAM_HEADERS['subscription-userinfo'],
+        )
+        expect(nodes.headers.get('profile-update-interval')).toBe('1')
+        const imported = importSubscription(nodes.text)
+        expect(imported.config).toBeUndefined()
+        expect(imported.proxies).toHaveLength(URI_NODES)
+        expect(imported.proxies.every((p) => p.name.startsWith('P-'))).toBe(true)
+
+        // 节点变化：配置不含订阅节点，缓存仍然有效；节点列表走 stale-while-revalidate
+        vi.setSystemTime(1_800_000_100_000)
+        okUpstream(yamlSubscription)
+        await call('POST', `/api/sources/${a.id}/refresh`)
+        expect((await sub(output.path, { app: app1 })).text).toBe(res.text)
+        expect(pending).toEqual([])
+        expect(proxyNames((await sub(`${output.path}/proxies`, { app: app1 })).text)).toHaveLength(
+          URI_NODES,
+        )
+        await Promise.all(pending)
+        expect(proxyNames((await sub(`${output.path}/proxies`, { app: app1 })).text)).toHaveLength(
+          15,
+        )
+
+        // rotate 后 provider 地址随 token 变化
+        const rotated = (await call('POST', `/api/outputs/${output.id}/rotate`)).json.output
+        const after = await sub(rotated.path, { app: app1 })
+        expect(after.text).toContain(`url: http://localhost${rotated.path}/proxies`)
+      })
+
+      it('只影响 mihomo：Surge 仍然内联节点', async () => {
+        const local = await createLocal()
+        const profile = await createProfile({ sourceIds: [local.id] })
+        const output = await createOutput({
+          profileId: profile.id,
+          target: 'auto',
+          options: { nodes: 'provider' },
+        })
+        const res = await sub(output.path, { ua: 'Surge iOS/3083' })
+        expect(res.text).not.toContain('proxy-providers')
+        expect(
+          res.text.split('\n').filter((l) => / = (ss|trojan|vmess|hysteria2),/.test(l)).length,
+        ).toBeGreaterThan(0)
+      })
+
+      it('内联模式的输出也提供节点列表', async () => {
+        const local = await createLocal()
+        const profile = await createProfile({ sourceIds: [local.id] })
+        const output = await createOutput({ profileId: profile.id, target: 'surge' })
+        const res = await sub(`${output.path}/proxies`)
+        expect(res.status).toBe(200)
+        expect(proxyNames(res.text)).toHaveLength(URI_NODES)
+        expect(res.text).not.toContain('MANAGED-CONFIG')
+      })
+    })
+  })
+
+  describe('备份与恢复', () => {
+    async function populate() {
+      okUpstream()
+      const remote = await createRemote({ userAgent: 'mihomo/1.19', ttlSec: 3600 })
+      await call('POST', `/api/sources/${remote.id}/refresh`)
+      const local = await createLocal()
+      const profile = await createProfile({
+        sourceIds: [remote.id, local.id],
+        pipeline: [{ op: 'add-flag' }],
+      })
+      const output = await createOutput({
+        profileId: profile.id,
+        target: 'auto',
+        options: { nodes: 'provider' },
+      })
+      return { remote, local, profile, output }
+    }
+
+    it('backup：明文订阅链接与输出 token，附妥善保管的提示；不含令牌、密钥和缓存', async () => {
+      const { remote, local, profile, output } = await populate()
+      expect((await call('GET', '/api/backup', undefined, { token: null })).status).toBe(401)
+
+      const res = await call('GET', '/api/backup')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-disposition')).toMatch(
+        /^attachment; filename="subloom-backup-\d{8}\.json"$/,
+      )
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      const backup = res.json as unknown as Server.Backup
+      expect(backup).toMatchObject({ format: 'subloom-backup', version: 1 })
+      expect(backup.exportedAt).toEqual(expect.any(Number))
+      expect(backup.warning).toMatch(/plaintext/i)
+      expect(backup.sources).toEqual([
+        {
+          id: remote.id,
+          name: '机场 A',
+          kind: 'remote',
+          url: SUB_URL,
+          content: null,
+          userAgent: 'mihomo/1.19',
+          ttlSec: 3600,
+          createdAt: remote.createdAt,
+          updatedAt: remote.updatedAt,
+        },
+        {
+          id: local.id,
+          name: '本地',
+          kind: 'local',
+          url: null,
+          content: uriSubscription,
+          userAgent: null,
+          ttlSec: local.ttlSec,
+          createdAt: local.createdAt,
+          updatedAt: local.updatedAt,
+        },
+      ])
+      expect(backup.profiles).toEqual([
+        {
+          id: profile.id,
+          ir: profile.ir,
+          pipeline: profile.pipeline,
+          sourceIds: profile.sourceIds,
+          createdAt: profile.createdAt,
+          updatedAt: profile.updatedAt,
+        },
+      ])
+      expect(backup.outputs).toEqual([
+        {
+          id: output.id,
+          profileId: profile.id,
+          target: 'auto',
+          token: output.token,
+          options: { nodes: 'provider' },
+          createdAt: output.createdAt,
+        },
+      ])
+      expect(Object.keys(backup).sort()).toEqual(
+        ['exportedAt', 'format', 'outputs', 'profiles', 'sources', 'version', 'warning'].sort(),
+      )
+      const text = JSON.stringify(backup)
+      expect(text).not.toContain(ENV.secretKey)
+      expect(text).not.toContain(ADMIN_TOKEN)
+      expect(text).not.toContain(`"${(await dbSource(remote.id))?.urlEnc}"`)
+    })
+
+    it('restore 到新实例：数据一致，URL 用新密钥重新加密，旧链接仍然有效', async () => {
+      const { remote, local, profile, output } = await populate()
+      const backup = (await call('GET', '/api/backup')).json
+
+      const storage2 = await createStorage()
+      const p2 = { ...makePlatform(), ...storage2, env: { ...ENV, secretKey: 'other-key' } }
+      const app2 = server.createApp(p2)
+      const res = await call('POST', '/api/restore', backup, { app: app2 })
+      expect(res.status, JSON.stringify(res.json)).toBe(200)
+      expect(res.json.restored).toEqual({ sources: 2, profiles: 1, outputs: 1 })
+
+      const sources2 = (await call('GET', '/api/sources', undefined, { app: app2 })).json.sources
+      expect(sources2.find((s) => s.id === remote.id)).toMatchObject({
+        url: SUB_URL,
+        userAgent: 'mihomo/1.19',
+        ttlSec: 3600,
+        createdAt: remote.createdAt,
+      })
+      const rows = await p2.db.select().from(sources).where(eq(sources.id, remote.id))
+      expect(rows[0]?.urlEnc).toMatch(/^v1\./)
+      expect(rows[0]?.urlEnc).not.toBe((await dbSource(remote.id))?.urlEnc)
+      // 本地订阅立即解析；远程订阅需要重新拉取
+      const localNodes = await call('GET', `/api/sources/${local.id}/nodes`, undefined, {
+        app: app2,
+      })
+      expect(localNodes.json.proxies).toHaveLength(URI_NODES)
+      const remoteNodes = await call('GET', `/api/sources/${remote.id}/nodes`, undefined, {
+        app: app2,
+      })
+      expect(remoteNodes.json.error.code).toBe('NO_CACHE')
+
+      expect(
+        (await call('GET', `/api/profiles/${profile.id}`, undefined, { app: app2 })).json.profile,
+      ).toEqual(profile)
+      expect((await sub(output.path, { app: app2 })).status).toBe(200)
+      expect((await sub(`${output.path}/proxies`, { app: app2 })).status).toBe(200)
+
+      // 再次备份得到相同的数据
+      const again = (await call('GET', '/api/backup', undefined, { app: app2 })).json
+      expect({ ...again, exportedAt: 0 }).toEqual({ ...backup, exportedAt: 0 })
+    })
+
+    it('restore 替换全部现有数据，清除旧数据的缓存', async () => {
+      const { output } = await populate()
+      const backup = (await call('GET', '/api/backup')).json as unknown as Server.Backup
+      expect((await sub(output.path)).status).toBe(200)
+
+      const extra = await createLocal(yamlSubscription, '多余')
+      const extraProfile = await createProfile({ sourceIds: [extra.id] })
+      const extraOutput = await createOutput({ profileId: extraProfile.id, target: 'mihomo' })
+      expect((await sub(extraOutput.path)).status).toBe(200)
+
+      const res = await call('POST', '/api/restore', backup)
+      expect(res.status).toBe(200)
+      expect((await call('GET', '/api/sources')).json.sources).toHaveLength(2)
+      expect((await call('GET', '/api/profiles')).json.profiles).toHaveLength(1)
+      expect((await call('GET', '/api/outputs')).json.outputs).toHaveLength(1)
+      expect((await sub(extraOutput.path)).status).toBe(404)
+      expect(await platform.blobs.get(`src:${extra.id}:nodes`)).toBeNull()
+      expect(await platform.blobs.get(`out:${extraOutput.id}:mihomo`)).toBeNull()
+      expect(await platform.blobs.get(`out:${output.id}:mihomo`)).toBeNull()
+      const logs = await platform.db.select().from(fetchLogs)
+      expect(logs.filter((l) => l.sourceId === extra.id)).toEqual([])
+    })
+
+    it('备份内容不合法时返回 400，不改动现有数据', async () => {
+      const { profile } = await populate()
+      const backup = (await call('GET', '/api/backup')).json as unknown as Server.Backup
+      const [s0, s1] = backup.sources
+      const [p0] = backup.profiles
+      const [o0] = backup.outputs
+      if (!s0 || !s1 || !p0 || !o0) throw new Error('backup is incomplete')
+      const bad: unknown[] = [
+        '{not json',
+        {},
+        { ...backup, format: 'other' },
+        { ...backup, version: 2 },
+        { ...backup, sources: [s0, { ...s1, id: s0.id }] },
+        { ...backup, sources: [{ ...s0, url: 'ftp://x.example.com/' }, s1] },
+        { ...backup, sources: [{ ...s0, kind: 'local', content: null }, s1] },
+        { ...backup, sources: [s0] },
+        { ...backup, profiles: [{ ...p0, ir: { name: 'x' } }] },
+        { ...backup, outputs: [{ ...o0, profileId: 'missing' }] },
+        { ...backup, outputs: [o0, { ...o0, id: 'other' }] },
+        { ...backup, outputs: [{ ...o0, target: 'loon' }] },
+      ]
+      for (const body of bad) {
+        const res = await call('POST', '/api/restore', body)
+        expect(res.status, JSON.stringify(body).slice(0, 200)).toBe(400)
+        expect(res.json.error.code).toBe('INVALID_REQUEST')
+      }
+      expect((await call('GET', `/api/profiles/${profile.id}`)).json.profile).toEqual(profile)
+      expect((await call('GET', '/api/backup')).json).toMatchObject({
+        sources: backup.sources,
+        profiles: backup.profiles,
+        outputs: backup.outputs,
+      })
     })
   })
 }

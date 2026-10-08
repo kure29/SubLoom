@@ -234,6 +234,7 @@ interface ExportOptions {
   defaultUdp?: boolean      // 节点未设置 udp 时是否开启 UDP，默认 true
   ruleSetPolicy?: string    // 规则集下载策略组：策略组名或 DIRECT，默认见下方"规则集下载"
   ruleSetMirror?: 'original' | 'jsdelivr' | { prefix: string } // 规则集镜像，默认 original
+  proxyProvider?: { name: string; url: string; interval?: number } // 仅 mihomo：订阅节点改由 proxy-providers 引用，见"mihomo 导出器"
 }
 
 interface Exporter {
@@ -273,7 +274,8 @@ interface Exporter {
 - 规则集输出为 `rule-providers`（`type: http`，键为 RuleSet 的 `id`）+ `RULE-SET,<id>,<target>` 规则。没有 `sources.mihomo`、格式为 `list`、或 `classical` 行为配 `mrs` 格式的规则集无法使用，移除并警告。
 - rule-provider 总是输出 `proxy` 字段（下载策略，见"规则集下载"，包括 `DIRECT`）。导入时保留在 `extra.mihomo.proxy` 中的值被导出选项覆盖，两者不同时给出 info 级的 `EXTRA_IGNORED`。
 - mihomo 的规则是逗号分隔、不能加引号的字符串：节点名和组名中的 `,` 替换为全角 `，`（与 Surge 相同，`INVALID_NAME_CHARS`），值中含逗号的规则移除并警告（`UNSUPPORTED_RULE_VALUE`）。
-- 节点直接写入 `proxies`。`proxy-providers`（指向托管节点列表的链接）依赖 M4 的输出链接，届时再做。
+- 节点默认直接写入 `proxies`。
+- **proxy-providers**（导出选项 `proxyProvider`，由 server 根据输出链接生成，见 5.3 的输出选项 `nodes: 'provider'`）：订阅节点不写入 `proxies`，改为 `proxy-providers: { <name>: { type: http, url, interval } }`（位于 `proxies` 之后、`proxy-groups` 之前；与 `profile.extra.mihomo['proxy-providers']` 合并，同名时以导出选项为准）。`includeAllProxies` 的组在 `include-all-proxies` 之外加 `use: [<name>]`（`filter`、`exclude-filter` 同样作用于 provider 中的节点）。mihomo 组的 `proxies` 不能引用 provider 中的节点：显式引用订阅节点的成员按悬空引用移除并警告（`UNKNOWN_GROUP_MEMBER`）。设置该选项时导出器忽略传入的 `nodes`。其他导出器忽略该选项。
 - YAML 用自写的字符串生成器输出（风格与 `yaml` 库 `lineWidth: 0` 相同，测试中与原实现逐字节对照），不折行；按 YAML 1.1 规则给可能被误读的字符串（如 `01234567`、`yes`、`1_000`）加引号，保证 mihomo（go-yaml）读到的仍是字符串。换行、控制字符写成单行双引号字符串。
 
 ### Surge 导出器
@@ -347,6 +349,7 @@ type PipelineOp =
 
 ```ts
 interface Platform {
+  name: 'node' | 'workers'        // 运行平台，/api/meta 返回给前端
   db: SubloomDb                   // @subloom/db 导出的类型：better-sqlite3 或 D1 的 Drizzle 实例
   blobs: BlobStore                // Node: 文件系统；Workers: KV
   env: { adminToken?: string; secretKey?: string; corsOrigins: string[]; allowPrivateFetch: boolean }
@@ -371,7 +374,7 @@ settings     key, value                               管理令牌哈希、实�
 sources      id, name, kind('remote'|'local'),
              url_enc, content, user_agent, ttl_sec,
              last_fetched_at, last_status, last_error,
-             userinfo_json, created_at, updated_at
+             userinfo_json, nodes_fetched_at, created_at, updated_at
 profiles     id, name, ir_json, pipeline_json,
              source_ids_json, updated_at, created_at
 outputs      id, profile_id, target('mihomo'|'surge'|'shadowrocket'|'loon'|'auto'),
@@ -380,7 +383,9 @@ fetch_logs   id, source_id, at, status, bytes, duration_ms, error
 ```
 
 - 订阅原始内容、解析后的节点、生成好的配置**不存数据库**，存 BlobStore（D1 有单行大小限制）。本地订阅（`kind: 'local'`）由用户粘贴，内容存在 `content` 列。
-- Key 约定：`src:<id>:raw`（远程订阅最近一次成功拉取的原始内容）、`src:<id>:nodes`、`out:<id>:<hash>`。
+- Key 约定：`src:<id>:raw`（远程订阅最近一次成功拉取的原始内容）、`src:<id>:nodes`、`out:<id>:<target>`（生成结果缓存，`target` 为 `mihomo`、`surge` 或节点列表 `proxies`，见 5.3"生成结果缓存"）。
+- `sources.nodes_fetched_at`：`src:<id>:nodes` 的版本（即其中的 `fetchedAt`，从未成功时为 null），生成结果的缓存键用它判断节点是否变化，不必读取节点缓存本身。
+- `profiles.name` 与 IR 中的 `name` 保持一致（列表不必解析 `ir_json`）；`source_ids_json` 为有序的订阅源 id 数组，删除订阅源时从所有 profile 中移除。
 - **`src:<id>:nodes`**：刷新订阅时就把解析结果以 JSON 存入（`{ fetchedAt, format, proxies, warnings }`，即 `importSubscription` 的结果去掉 `config`，加上本次成功拉取的时间）。解析比导出更耗时（500 节点约 10ms，见 5.6），生成配置时直接读取它，不再重复解析原始内容。
 - 时间字段（`*_at`）均为毫秒时间戳（整数）。`last_status`、`fetch_logs.status` 为 `'ok' | 'error'`，HTTP 状态码等细节写在 `error` 中。`last_fetched_at` 是最近一次尝试拉取的时间（无论成败），最近一次成功的时间见 nodes 中的 `fetchedAt`。
 - `fetch_logs.source_id` 引用 `sources`、`outputs.profile_id` 引用 `profiles`，均为 `ON DELETE CASCADE`（Node 下需开启 `PRAGMA foreign_keys`，D1 默认开启）。每个订阅只保留最近 20 条拉取日志。
@@ -391,7 +396,7 @@ fetch_logs   id, source_id, at, status, bytes, duration_ms, error
 管理接口（`Authorization: Bearer <ADMIN_TOKEN>`）：
 
 ```
-GET    /api/meta                     版本、运行平台、各导出器能力矩阵
+GET    /api/meta                     版本、运行平台、密钥来源、各导出器能力矩阵
 GET    /api/sources                  列表
 POST   /api/sources                  新建
 GET    /api/sources/:id
@@ -406,39 +411,89 @@ POST   /api/profiles
 GET    /api/profiles/:id
 PATCH  /api/profiles/:id
 DELETE /api/profiles/:id
-POST   /api/profiles/:id/preview?target=surge   返回 { text, warnings }
+POST   /api/profiles/:id/preview?target=surge   返回 { text, warnings, pipelineWarnings, sources }
 
-GET    /api/outputs
+GET    /api/outputs                  列表（可选 ?profileId=）
 POST   /api/outputs
+GET    /api/outputs/:id
+PATCH  /api/outputs/:id
 DELETE /api/outputs/:id
 POST   /api/outputs/:id/rotate       重新生成 token
 
 GET    /api/backup                   导出全部数据（订阅 URL 明文，提示用户妥善保存）
-POST   /api/restore
-GET    /healthz
+POST   /api/restore                  用备份全量替换现有数据
 ```
 
 - 错误响应统一为 `{ error: { code, message } }`：未认证 401（`UNAUTHORIZED`）、请求不合法 400（`INVALID_REQUEST`）、不存在 404（`NOT_FOUND`、还没有节点缓存时 `NO_CACHE`）。
-- 订阅源：`POST` 的请求体为 `{ name, kind: 'remote', url, userAgent?, ttlSec? }` 或 `{ name, kind: 'local', content }`；`kind` 创建后不可修改。返回的订阅源包含明文 `url`（管理接口已认证）和解析后的 `userinfo`，列表不返回本地订阅的 `content`。新建远程订阅不会自动拉取，由前端随后调用 refresh；本地订阅在新建和修改 `content` 时立即解析并写入 nodes。
+- 订阅源：`POST` 的请求体为 `{ name, kind: 'remote', url, userAgent?, ttlSec? }` 或 `{ name, kind: 'local', content }`；`kind` 创建后不可修改。返回的订阅源包含明文 `url`（管理接口已认证）和解析后的 `userinfo`，列表不返回本地订阅的 `content`。新建远程订阅不会自动拉取，由前端随后调用 refresh；本地订阅在新建和修改 `content` 时立即解析并写入 nodes。删除订阅源时同时从所有 profile 的 `sourceIds` 中移除。
 - `refresh` 成功返回 200 `{ source, nodeCount, warnings }`；失败返回 502 `{ error, source }`，`error.code` 为 `SSRF_BLOCKED`、`FETCH_FAILED`、`PARSE_FAILED` 或 `DECRYPT_FAILED`。
+- **meta**：`{ name: 'subloom', version, coreVersion, platform: 'node' | 'workers', secretKeySource: 'env' | 'generated', targets: { <target>: Capabilities } }`。`targets` 只列出已实现的导出器。`secretKeySource` 为 `generated` 时前端提示用户设置 `SECRET_KEY`（原因见 5.5）。
+- **profiles**：`POST` 的请求体为 `{ ir: Profile, pipeline?: PipelineOp[], sourceIds?: string[] }`（`ir` 用 `ProfileSchema` 校验，`pipeline` 默认 `[]`，`sourceIds` 默认 `[]`，必须是已存在的订阅源且不重复），`PATCH` 可修改其中任意几项。返回 `{ profile: { id, name, ir, pipeline, sourceIds, createdAt, updatedAt } }`，`name` 即 `ir.name`；列表不返回 `ir` 和 `pipeline`。删除 profile 时同时删除它的输出及其缓存。
+- **preview**：`target` 为已实现的导出器（`mihomo`、`surge`）。请求体可选，为 `{ ir?, pipeline?, sourceIds?, options? }`，给出的项覆盖已保存的值（前端实时预览尚未保存的编辑），`options` 为导出选项（不含 `proxyProvider`）。按 `sourceIds` 的顺序读取各订阅源的节点缓存并拼接 → 流水线 → 导出，不使用也不写入生成结果缓存。返回 `{ text, warnings: CompatWarning[], pipelineWarnings: PipelineWarning[], sources: [{ id, nodeCount }] }`，还没有节点缓存的订阅源 `nodeCount` 为 null（生成时跳过）。
+- **outputs**：`POST` 的请求体为 `{ profileId, target, options? }`。`target` 为已实现的导出器或 `auto`；`shadowrocket`、`loon` 的导出器实现前返回 400。`options` 为 `{ export?: ExportOptions（不含 proxyProvider）, nodes?: 'inline' | 'provider' }`，`nodes` 默认 `inline`，`provider` 只影响 mihomo（见第 4 节"mihomo 导出器"），provider 指向 `/sub/<token>/proxies`。`PATCH` 可修改 `target`、`options`。返回 `{ output: { id, profileId, target, token, path: '/sub/<token>', options, lastAccessAt, createdAt } }`。`rotate` 生成新 token，旧链接立即失效（404）。删除和 rotate 时清除该输出的生成结果缓存。
 
 公开接口（无需认证，靠 token）：
 
 ```
-GET /sub/:token
+GET /sub/:token            生成好的配置
+GET /sub/:token/proxies    经流水线处理的订阅节点（mihomo 的 proxies 列表），供 nodes: 'provider' 的 proxy-providers 引用
+GET /healthz               { status: 'ok' }；初始化或数据库访问失败时 503 { status: 'error' }（不含细节）
 ```
 
-行为：
+`/sub/:token` 的行为：
 
-1. 根据 token 找到 output。target 为 `auto` 时按 User-Agent 识别客户端（识别失败默认 mihomo）。
-2. 优先返回缓存的生成结果；缓存过期则先返回旧结果，同时用 `waitUntil` 在后台刷新（stale-while-revalidate）。没有缓存时才同步生成。
+1. 根据 token 找到 output（找不到时 404）。target 为 `auto` 时按 User-Agent 识别客户端（见下方"User-Agent 识别"，识别失败默认 mihomo）。
+2. 读取生成结果缓存，按缓存键决定直接返回、先返回旧结果并在后台刷新（stale-while-revalidate），还是同步生成（见下方"生成结果缓存"）。生成过程与 preview 相同：节点缓存拼接 → 流水线 → 导出；`nodes: 'provider'` 时 mihomo 配置不含订阅节点。
 3. 响应头：
    - `Content-Type: text/plain; charset=utf-8`
-   - `subscription-userinfo`：合并所有来源订阅的流量与到期时间（upload/download/total 求和，expire 取最早）
-   - `profile-update-interval`：以小时为单位（mihomo 系客户端读取）
-   - `Content-Disposition: attachment; filename*=UTF-8''<profile名>.yaml`（mihomo 系客户端用作配置名）
-4. Surge 输出在首行写入 `#!MANAGED-CONFIG <当前URL> interval=<秒> strict=false`。
+   - `subscription-userinfo`：合并 profile 中所有订阅源的流量与到期时间（见下方"流量信息合并"），没有任何来源有流量信息时不返回该头
+   - `profile-update-interval`：以小时为单位（mihomo 系客户端读取），取 profile 中远程订阅源 `ttlSec` 的最小值（没有远程订阅源时为默认的 6 小时），向上取整，至少 1
+   - `Content-Disposition: attachment; filename*=UTF-8''<profile名>.yaml`（mihomo 系客户端用作配置名；Surge 为 `.conf`）
+   - `X-SubLoom-Target`：实际导出的客户端；按 UA 回退时另有 `X-SubLoom-Fallback: <识别出的客户端>`
+4. Surge 输出在首行写入 `#!MANAGED-CONFIG <当前URL> interval=<秒> strict=false`（间隔同上，单位为秒）。该行在响应时添加，不进入缓存。
 5. 更新 `last_access_at`。
+
+`/sub/:token/proxies` 同样使用生成结果缓存（target 记为 `proxies`），响应头同上（没有 MANAGED-CONFIG）。`proxy-providers` 的 `interval` 与 `profile-update-interval` 相同（单位为秒）。
+
+**当前 URL**：取请求的 URL；反向代理后面的 Node 部署按 `X-Forwarded-Proto`、`X-Forwarded-Host` 改写协议和主机名。只影响返回给该请求者的内容（MANAGED-CONFIG 行在响应时添加；provider 地址参与缓存键，见下），不会污染其他请求的结果。
+
+**User-Agent 识别**（不区分大小写，按顺序匹配，测试表覆盖常见客户端的真实 UA）：
+
+| 客户端 | UA 特征 | 导出 |
+|---|---|---|
+| Shadowrocket | `Shadowrocket` | mihomo（回退） |
+| Loon | `Loon` | mihomo（回退） |
+| Surge | `Surge`（含 `Surge iOS`、`Surge Mac`） | surge |
+| Stash | `Stash` | mihomo |
+| mihomo 系 | `mihomo`、`clash.meta`、`clash-verge`、`ClashX`、`FlClash`、`Clash Nyanpasu`、`ClashMetaForAndroid`、`Clash`（含 Clash for Windows / Android 等） | mihomo |
+| 其他 | | mihomo（默认） |
+
+- Shadowrocket、Loon 的导出器实现前回退到 mihomo（Shadowrocket 能读取 Clash/mihomo 订阅中的节点，Loon 可将其作为节点订阅），响应头带 `X-SubLoom-Fallback`，日志记一条 info。导出器实现后改为对应的 target。
+- 识别顺序中 Shadowrocket、Loon 在前：它们的 UA 可能带有其他客户端的关键字。
+
+**生成结果缓存**：BlobStore 中每个输出、每个 target 一份（`out:<id>:<target>`），内容为 `{ configKey, nodesKey, text, generatedAt }`，不设 TTL，删除或 rotate 输出、删除 profile 时清除。
+
+- `configKey`：SHA-256（profile 的 `ir_json`、`pipeline_json`、`source_ids_json`，输出的 `options_json`，target，core 版本 `CORE_VERSION`，provider 地址）。
+- `nodesKey`：SHA-256（profile 各订阅源的 id 与 `nodes_fetched_at`）。`nodes: 'provider'` 的 mihomo 配置不含订阅节点，`nodesKey` 为空串。
+- 任一项变化都会自动失效，不需要手动清理：
+  - 没有缓存，或 `configKey` 不同（用户修改了 profile、导出选项，或升级了 core）：同步生成，写入缓存后返回，客户端下一次更新就能拿到新配置。
+  - 只有 `nodesKey` 不同（订阅刷新带来了新节点）：先返回旧结果，同时用 `waitUntil` 在后台重新生成（stale-while-revalidate）。同一个 platform 上同一份缓存同时只有一个后台生成任务。
+  - 都相同：直接返回。
+
+**流量信息合并**（`subscription-userinfo`）：只看 profile 中的订阅源。
+
+- 没有流量信息的来源（本地订阅、上游没有该头、从未成功拉取）不参与合并；所有来源都没有时不返回该头。
+- `upload`、`download`、`total` 分别对给出了该字段的来源求和，没有任何来源给出的字段省略。
+- `expire` 取给出了该字段的来源中最早的一个；`expire=0`（部分面板表示不过期）视为未给出。
+
+**备份与恢复**：
+
+- `GET /api/backup` 返回 `{ format: 'subloom-backup', version: 1, exportedAt, warning, sources, profiles, outputs }`，带 `Content-Disposition: attachment`、`Cache-Control: no-store`。`warning` 字段（英文）和接口文档都提示：**备份中的订阅链接是明文（常带有机场 token），输出 token 也可直接访问配置，请妥善保管，不要分享或上传到公开位置**。
+  - `sources`：`{ id, name, kind, url, content, userAgent, ttlSec, createdAt, updatedAt }`，`url` 为明文（无法解密时为 null）。
+  - `profiles`：`{ id, ir, pipeline, sourceIds, createdAt, updatedAt }`。
+  - `outputs`：`{ id, profileId, target, token, options, createdAt }`，含 token，恢复后客户端中的链接仍然有效。
+  - 不含管理令牌、密钥、节点和生成结果缓存、拉取日志。
+- `POST /api/restore` 的请求体为备份内容。先完整校验（格式、版本、各字段、id 和 token 不重复、引用的订阅源和 profile 存在），通过后清空并替换全部数据：删除现有订阅源、profile、输出、拉取日志及其缓存，再写入备份中的数据，URL 用当前密钥重新加密。本地订阅立即解析；远程订阅需要重新拉取（由前端或定时任务触发）。返回 `{ restored: { sources, profiles, outputs } }`。校验失败返回 400，不改动现有数据。D1 不支持交互式事务，写入过程中出错时可能只恢复了一部分，此时重新执行 restore 即可。
 
 ### 5.4 订阅拉取
 
@@ -454,9 +509,11 @@ GET /sub/:token
 
 - **管理令牌**：优先读环境变量 `ADMIN_TOKEN`；未设置时首次启动自动生成（32 字节随机数，base64url），SHA-256 哈希后存入 settings（`admin_token_hash`），明文只打印一次到日志（Docker 日志 / Workers 控制台日志；并发初始化时只有写入成功的一方打印）。校验时对请求中的令牌取 SHA-256，与期望的哈希做常量时间比较。
 - **加密**：订阅 URL 使用 AES-256-GCM 加密存储，密钥由 `SECRET_KEY` 经 HKDF-SHA256 派生。密文格式 `v1.<iv>.<密文+tag>`（base64url），以 `source:<id>` 作为附加认证数据，密文不能挪到其他订阅上使用。未设置 `SECRET_KEY` 时自动生成并存入 settings（`secret_key`），日志中提醒：密钥与密文在同一个数据库中，数据库泄露即可解密，要真正保护 URL 请设置 `SECRET_KEY` 环境变量（丢失则无法解密）。settings 中另存一段用当前密钥加密的校验值（`secret_key_check`），启动时解不开则在日志中报错（`SECRET_KEY` 被更换），对应订阅刷新时报 `DECRYPT_FAILED`。
-- **输出 token**：32 字节随机数，base64url 编码。
+- **密钥来源**：自动生成的密钥与密文存在同一个数据库中，数据库泄露时加密形同虚设。`/api/meta` 返回 `secretKeySource`（`env`：来自 `SECRET_KEY` 环境变量；`generated`：自动生成并存在数据库中），为 `generated` 时前端显著提示用户设置 `SECRET_KEY`。部署文档推荐通过环境变量（Docker）或 `wrangler secret put SECRET_KEY`（Workers）设置，并说明：设置后已有的密文需要用原密钥解开，因此应在添加订阅之前设置，或设置后重新填写订阅 URL（也可以先备份、设置后再恢复）。
+- **输出 token**：32 字节随机数，base64url 编码。token 即访问凭据，日志中只出现前 4 个字符（如 `abcd…`），不出现完整 token。
+- **备份**：`/api/backup` 导出明文订阅链接和输出 token，接口返回的 `warning` 字段与文档都提示用户妥善保管（见 5.3"备份与恢复"）。
 - **SSRF**：只允许 `http`、`https`。默认拒绝拉取私有和保留地址：IPv4 的 0/8、10/8、100.64/10、127/8、169.254/16、172.16/12、192.0.0/24、192.0.2/24、192.168/16、198.18/15、198.51.100/24、203.0.113/24、224/4、240/4；IPv6 的 ::/96（含 `::`、`::1`）、100::/64、2001:db8::/32、fc00::/7、fe80::/10、fec0::/10、ff00::/8，以及内嵌 IPv4 的 `::ffff:0:0/96`、`64:ff9b::/96`、`2002::/16` 按内嵌的 IPv4 判断；`localhost`、`*.localhost` 视为私有。Node 下用 `resolveHost` 解析 DNS，任一地址为私有即拒绝（解析失败同样拒绝）；Workers 无法解析 DNS，平台本身不允许访问内网地址。设置 `ALLOW_PRIVATE_FETCH=true` 可关闭全部检查（用于拉取局域网内的订阅）。
-- **日志脱敏**：日志中不出现完整订阅 URL、节点地址和密码。
+- **日志脱敏**：日志中不出现完整订阅 URL、节点地址、密码和完整的输出 token。
 - **CORS**：管理接口只允许 `CORS_ORIGINS` 中列出的来源（默认包含实例自身和官方前端域名）。
 
 ### 5.6 Workers 的限制与对策
@@ -479,7 +536,7 @@ GET /sub/:token
 - 多架构：`linux/amd64`、`linux/arm64`（覆盖 NAS 和树莓派）。
 - 发布到 GHCR，镜像名 `ghcr.io/<owner>/subloom`（可选同时发布到 Docker Hub）。
 - 数据目录 `/data`（SQLite 数据库 + 缓存文件），通过 volume 挂载。
-- 环境变量：`ADMIN_TOKEN`、`SECRET_KEY`、`PORT`（默认 3000）、`DATA_DIR`（默认 `./data`，镜像中为 `/data`）、`CORS_ORIGINS`（逗号分隔）、`ALLOW_PRIVATE_FETCH`、`REFRESH_INTERVAL_MIN`（定时刷新的检查间隔，默认 10，0 为关闭）。全部可选。
+- 环境变量：`ADMIN_TOKEN`、`SECRET_KEY`（文档推荐设置，见 5.5"密钥来源"）、`PORT`（默认 3000）、`DATA_DIR`（默认 `./data`，镜像中为 `/data`）、`CORS_ORIGINS`（逗号分隔）、`ALLOW_PRIVATE_FETCH`、`REFRESH_INTERVAL_MIN`（定时刷新的检查间隔，默认 10，0 为关闭）。全部可选。
 - 数据目录结构：`subloom.db`（SQLite）、`blobs/`（文件 BlobStore，一个 key 一个文件，文件名为 key 的百分号编码，先写临时文件再改名）。
 - 启动时自动执行数据库迁移。
 - 提供 `HEALTHCHECK` 和 `docker-compose.yml` 示例。
@@ -489,6 +546,7 @@ GET /sub/:token
 - `apps/worker/wrangler.jsonc` 声明 D1、KV 绑定，Cron Triggers，以及静态资源（Workers Static Assets 托管前端）。
 - README 中放 "Deploy to Cloudflare" 按钮，目标是让用户全程不用命令行完成部署。实现时确认该按钮对 D1/KV 的自动创建和绑定支持情况，不支持的部分在文档中补充手动步骤。
 - 首次请求时自动执行 D1 迁移（或在部署流程中执行），保证用户升级时零操作。
+- 部署文档推荐用 `wrangler secret put SECRET_KEY`（或在 Cloudflare 控制台中添加 Secret）设置 `SECRET_KEY`，见 5.5"密钥来源"。
 - 升级方式：用户 fork 仓库，通过 GitHub Actions 定期同步上游并自动部署。提供该 workflow 模板。
 
 ### 官方前端
@@ -502,7 +560,7 @@ GET /sub/:token
 
 页面：
 
-1. **连接页**：输入后端地址和管理令牌（自带前端时后端地址自动填当前域名）。令牌存在 localStorage。
+1. **连接页**：输入后端地址和管理令牌（自带前端时后端地址自动填当前域名）。令牌存在 localStorage。连接后若 `/api/meta` 的 `secretKeySource` 为 `generated`，全局显著提示用户设置 `SECRET_KEY`（附部署文档链接）。
 2. **订阅源**：列表、新增/编辑、立即刷新、查看节点、查看最近一次拉取状态和错误、流量与到期信息。
 3. **配置编辑器**（核心页面）：
    - 选择来源订阅；从预设模板新建。
@@ -510,6 +568,7 @@ GET /sub/:token
    - 规则：列表，拖拽排序，快速添加；规则集从内置的常用规则源中选择。
    - 右侧（移动端为切换标签）实时预览：选择目标客户端，显示生成的配置文本和兼容性警告。
 4. **输出链接**：为配置创建输出（选择客户端），复制链接、显示二维码、重新生成 token。
+5. **备份与恢复**：下载备份时提示其中含明文订阅链接，需妥善保管；恢复前确认将替换全部数据。
 
 要求：响应式布局，手机上可用；中英文；深色模式。
 
@@ -520,7 +579,7 @@ GET /sub/:token
 - **core**：每个导入器和导出器都有 golden 测试（`test/fixtures/<case>/input.*` 与 `expected.<target>.*`）。更新快照必须是有意为之。
 - **Surge 校验**：Surge 没有命令行校验工具，`expected.surge.*` 快照逐个对照官方手册人工核对；新增功能时在 PR 中附完整的 Surge 示例输出，在手机上导入测试。
 - **mihomo 实际校验**：CI 按固定版本（tag + commit SHA）从源码构建 mihomo（go.sum 校验依赖），对所有 `expected.mihomo.*` golden 输出执行 `mihomo -t`。GEOIP/GEOSITE 数据文件由 mihomo 首次运行时自动下载，所有文件共用一个数据目录并在 CI 中缓存。
-- **server**：同一套 API 集成测试分别在 Node（better-sqlite3）和 Workers（vitest-pool-workers + D1/KV 模拟）下运行。packages/* 的测试不能使用 Node API（拿不到 better-sqlite3），因此集成测试写在 `packages/server/test/api/suite.ts`（`describeApi(createPlatform)`，不以 `.test.ts` 结尾，server 自己不运行），由 `apps/node/test`（M5 起还有 `apps/worker/test`）传入各自的 Platform 运行；packages/server 自己只运行不需要数据库的单元测试（加密、SSRF、拉取、userinfo 解析）。
+- **server**：同一套 API 集成测试分别在 Node（better-sqlite3）和 Workers（vitest-pool-workers + D1/KV 模拟）下运行。packages/* 的测试不能使用 Node API（拿不到 better-sqlite3），因此集成测试写在 `packages/server/test/api/suite.ts`（`describeApi(createPlatform)`，不以 `.test.ts` 结尾，server 自己不运行），由 `apps/node/test`（M5 起还有 `apps/worker/test`）传入各自的 Platform 运行；packages/server 自己只运行不需要数据库的单元测试（加密、SSRF、拉取、userinfo 解析与合并、UA 识别、缓存键）。
 - **测试中不访问真实网络**：各包的 Vitest setup 文件把全局 `fetch` 替换为直接抛错的函数，测试中按需 mock；DNS 解析用假的 `resolveHost`。上游响应头使用 `packages/core/test/fixtures/import/subscription-headers.json`。
 - **性能基准**：500 节点订阅 → 解析 → 流水线 → 导出，记录耗时，在 CI 中监控回退。`packages/core/test/perf/` 中确定性生成 500 个节点（常见协议轮流出现）；`chain.bench.ts`（`pnpm --filter @subloom/core bench`）分别测量解析、流水线、各导出器和完整链路，CI 把结果写入 job summary；`chain.test.ts` 给完整链路设宽松上限（100ms，取 5 次中最快的一次；开发机上约 15–20ms），只拦截数量级的回退，避免 runner 性能波动导致误报。
 - **CI 流程**：lint → typecheck → test → build；main 分支打 tag 时发布 Docker 镜像。
@@ -564,11 +623,11 @@ GET /sub/:token
 - **验收**：Node 下可通过 API 添加订阅并刷新，节点预览正确，数据库中 URL 为密文
 
 ### M4 server：配置与输出链接
-- [ ] profiles 增删改查、preview 接口
-- [ ] outputs 增删改查、rotate
-- [ ] `/sub/:token`：UA 识别、缓存与 stale-while-revalidate、全部响应头、Surge MANAGED-CONFIG
-- [ ] backup / restore、`/api/meta`、`/healthz`
-- [ ] mihomo 导出器支持以 `proxy-providers` 引用托管的节点列表（M1 推迟至此）
+- [x] profiles 增删改查、preview 接口
+- [x] outputs 增删改查、rotate
+- [x] `/sub/:token`：UA 识别（测试表覆盖常见客户端）、缓存与 stale-while-revalidate（缓存键见 5.3）、全部响应头（含多来源 userinfo 合并）、Surge MANAGED-CONFIG；日志中不出现完整 token
+- [x] backup / restore（提示明文链接需妥善保管）、`/api/meta`（含 `secretKeySource`）、`/healthz`
+- [x] mihomo 导出器支持以 `proxy-providers` 引用托管的节点列表（M1 推迟至此），`/sub/:token/proxies`
 - **验收**：mihomo 客户端和 Surge 能通过输出链接导入配置，并显示流量信息
 
 ### M5 Workers 入口

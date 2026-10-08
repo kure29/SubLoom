@@ -18,4 +18,5 @@
 | `edge-common-en/` | `uri-edge-cases` 的节点（含重名）→ 常用分流模板（英文），重名节点自动改名 |
 | `profile-features/` | 手写 profile：general/dns/extra 全部字段、手动节点、四种策略组、全部规则类型（含 `src`、`no-resolve`、嵌套逻辑规则）、三种规则集格式 |
 | `surge-features/` | Surge 专项：各协议参数与子功能降级、WireGuard 段、名称中的 `,` `=` ` #`、组过滤合并与全局测速地址、规则类型映射、`src` → `SRC-IP`、FINAL 处理、RULE-SET / DOMAIN-SET、General / DNS 映射、附加段；规则集走 DIRECT 并用 jsDelivr 镜像 |
+| `provider-common-zh/` | 常用分流模板（中文），导出选项 `proxyProvider`：订阅节点通过 `proxy-providers` 引用托管的节点列表（M4 输出选项 `nodes: 'provider'`），配置中不含订阅节点 |
 | `cleanup/` | 需要清理的 profile：节点重名（含与组名、内置目标重名）、其他格式的 extra、悬空引用、重名的组、空组、不可用的规则集 |

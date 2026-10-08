@@ -1,0 +1,11 @@
+{
+  "description": "常用分流模板（中文），订阅节点通过 proxy-providers 引用托管的节点列表（输出选项 nodes: provider），配置中不含订阅节点",
+  "template": { "id": "common", "locale": "zh-CN" },
+  "options": {
+    "proxyProvider": {
+      "name": "subloom",
+      "url": "https://subloom.example.com/sub/aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5bC7dE9f/proxies",
+      "interval": 21600
+    }
+  }
+}

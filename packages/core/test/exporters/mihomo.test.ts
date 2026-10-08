@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import {
   type ExportOptions,
+  ExportOptionsSchema,
   exportMihomo,
+  exportSurge,
   importMihomoYaml,
   mihomoExporter,
   type Profile,
@@ -825,6 +827,105 @@ describe('top level', () => {
 
   it('always writes proxies, even when empty, and skips empty sections', () => {
     expect(exp(profile()).doc).toEqual({ proxies: [] })
+  })
+})
+
+describe('proxy providers', () => {
+  const provider = {
+    name: 'subloom',
+    url: 'https://sub.example.com/sub/T/proxies',
+    interval: 21600,
+  }
+  const groups: Profile['groups'] = [
+    {
+      name: 'Proxy',
+      type: 'select',
+      members: [
+        { kind: 'group', name: 'Auto' },
+        { kind: 'proxy', name: 'manual' },
+      ],
+      includeAllProxies: true,
+    },
+    {
+      name: 'Auto',
+      type: 'url-test',
+      members: [],
+      includeAllProxies: true,
+      filter: { include: 'HK', exclude: 'expire' },
+    },
+    { name: 'Pinned', type: 'select', members: [{ kind: 'proxy', name: 'sub-1' }] },
+  ]
+
+  it('references subscription nodes through proxy-providers instead of writing them', () => {
+    const { doc, text, warnings } = exp(
+      profile({ proxies: [ss('manual')], groups }),
+      [ss('sub-1'), ss('sub-2')],
+      { proxyProvider: provider },
+    )
+    // 订阅节点不写入 proxies，由 provider 提供
+    expect(doc.proxies.map((p) => p.name)).toEqual(['manual'])
+    expect(doc['proxy-providers']).toEqual({
+      subloom: { type: 'http', url: provider.url, interval: 21600 },
+    })
+    expect(Object.keys(doc)).toEqual(['proxies', 'proxy-providers', 'proxy-groups'])
+    expect(text.indexOf('proxy-providers:')).toBeGreaterThan(text.indexOf('proxies:'))
+
+    const [proxy, auto, pinned] = doc['proxy-groups'] ?? []
+    expect(proxy).toEqual({
+      name: 'Proxy',
+      type: 'select',
+      proxies: ['Auto', 'manual'],
+      use: ['subloom'],
+      'include-all-proxies': true,
+    })
+    expect(auto).toMatchObject({
+      use: ['subloom'],
+      'include-all-proxies': true,
+      filter: 'HK',
+      'exclude-filter': 'expire',
+    })
+    // mihomo 组的 proxies 不能引用 provider 中的节点：按悬空引用移除，补 DIRECT
+    expect(pinned).toEqual({ name: 'Pinned', type: 'select', proxies: ['DIRECT'] })
+    expect(codes(warnings)).toEqual([
+      ['UNKNOWN_GROUP_MEMBER', 'groups[2].members[0]', 'dropped'],
+      ['EMPTY_GROUP', 'groups[2]', 'downgraded'],
+    ])
+  })
+
+  it('omits interval when not given', () => {
+    const { doc } = exp(profile(), [], { proxyProvider: { name: 'p', url: provider.url } })
+    expect(doc['proxy-providers']).toEqual({ p: { type: 'http', url: provider.url } })
+  })
+
+  it('merges with proxy-providers from extra, the option winning on the same name', () => {
+    const extra = {
+      mihomo: {
+        'proxy-providers': {
+          other: { type: 'http', url: 'https://other.example.com/p', interval: 3600 },
+          subloom: { type: 'file', path: './x.yaml' },
+        },
+      },
+    }
+    const { doc } = exp(profile({ extra }), [], { proxyProvider: provider })
+    expect(doc['proxy-providers']).toEqual({
+      other: { type: 'http', url: 'https://other.example.com/p', interval: 3600 },
+      subloom: { type: 'http', url: provider.url, interval: 21600 },
+    })
+    expect(Object.keys(doc)).toEqual(['proxies', 'proxy-providers'])
+  })
+
+  it('validates the option', () => {
+    const parse = (proxyProvider: unknown) => ExportOptionsSchema.safeParse({ proxyProvider })
+    expect(parse(provider).success).toBe(true)
+    expect(parse({ ...provider, url: 'ftp://x.example.com/' }).success).toBe(false)
+    expect(parse({ ...provider, name: '' }).success).toBe(false)
+    expect(parse({ ...provider, interval: 0 }).success).toBe(false)
+  })
+
+  it('is ignored by the Surge exporter', () => {
+    const p = profile({ groups: groups.slice(0, 2) })
+    const nodes = [ss('sub-1')]
+    expect(exportSurge(p, nodes, { proxyProvider: provider })).toEqual(exportSurge(p, nodes))
   })
 })
 

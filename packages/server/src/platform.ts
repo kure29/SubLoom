@@ -2,6 +2,8 @@ import type { SubloomDb } from '@subloom/db'
 
 /** 运行时差异全部收敛到这里。Node 与 Workers 入口各自实现，见 PLAN.md 5.1。 */
 export interface Platform {
+  /** 运行平台，/api/meta 返回给前端（如 Workers 上隐藏自定义脚本） */
+  name: 'node' | 'workers'
   db: SubloomDb
   blobs: BlobStore
   env: PlatformEnv

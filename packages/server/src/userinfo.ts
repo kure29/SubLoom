@@ -24,3 +24,30 @@ export function parseUserinfo(header: string | null | undefined): Userinfo | nul
   }
   return Object.keys(result).length > 0 ? result : null
 }
+
+/**
+ * 合并多个来源的流量信息（`/sub/:token` 的 subscription-userinfo）。见 PLAN.md 5.3"流量信息合并"。
+ * 没有流量信息的来源（null）不参与；upload、download、total 对给出了该字段的来源求和；
+ * expire 取给出了该字段的来源中最早的一个，expire=0（不过期）视为未给出。都没有时返回 null。
+ */
+export function mergeUserinfo(list: ReadonlyArray<Userinfo | null>): Userinfo | null {
+  const result: Userinfo = {}
+  let any = false
+  for (const info of list) {
+    if (!info) continue
+    any = true
+    for (const field of ['upload', 'download', 'total'] as const) {
+      const v = info[field]
+      if (v !== undefined) result[field] = (result[field] ?? 0) + v
+    }
+    if (info.expire) result.expire = Math.min(result.expire ?? info.expire, info.expire)
+  }
+  return any ? result : null
+}
+
+/** 按 upload、download、total、expire 的顺序格式化，省略缺失的字段 */
+export function formatUserinfo(info: Userinfo): string {
+  return FIELDS.filter((f) => info[f] !== undefined)
+    .map((f) => `${f}=${info[f]}`)
+    .join('; ')
+}

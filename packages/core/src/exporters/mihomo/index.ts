@@ -66,17 +66,16 @@ export const MIHOMO_SPEC: TargetSpec = {
       : undefined,
 }
 
-function convertGroup({
-  group,
-  name,
-  type,
-  members,
-  extra,
-}: ResolvedGroup): Record<string, unknown> {
+function convertGroup(
+  { group, name, type, members, extra }: ResolvedGroup,
+  provider: string | undefined,
+): Record<string, unknown> {
   const out = compact({
     name,
     type,
     proxies: members.length ? members : undefined,
+    // 订阅节点由 proxy-provider 提供时，包含全部节点的组同时引用它
+    use: provider !== undefined && group.includeAllProxies ? [provider] : undefined,
     'include-all-proxies': group.includeAllProxies,
     filter: group.filter?.include,
     'exclude-filter': group.filter?.exclude,
@@ -157,17 +156,31 @@ export function exportMihomo(
     doc.dns = isRecord(doc.dns) ? mergeExtra(dns, doc.dns) : dns
   }
 
-  const r = resolveProfile(MIHOMO_SPEC, profile, nodes, opts, ctx)
+  // 订阅节点由 proxy-provider 提供时不写入配置；组的 proxies 不能引用 provider 中的节点，
+  // 显式引用订阅节点的成员按悬空引用清理
+  const provider = opts.proxyProvider
+  const r = resolveProfile(MIHOMO_SPEC, profile, provider ? [] : nodes, opts, ctx)
   const proxies = r.proxies.map(({ node, name, extra }) => ({
     ...toMihomoProxy(node, defaultUdp, extra),
     name,
   }))
-  const proxyGroups = r.groups.map(convertGroup)
+  const proxyGroups = r.groups.map((g) => convertGroup(g, provider?.name))
   const providers = convertRuleProviders(r, ctx)
   const rules = r.rules.map(({ rule, target }) => formatRule(rule, target))
 
+  let proxyProviders: Record<string, unknown> | undefined
+  if (provider) {
+    const fromExtra = doc['proxy-providers']
+    proxyProviders = {
+      ...(isRecord(fromExtra) ? fromExtra : {}),
+      [provider.name]: compact({ type: 'http', url: provider.url, interval: provider.interval }),
+    }
+    delete doc['proxy-providers']
+  }
+
   for (const key of ['proxies', 'proxy-groups', 'rule-providers', 'rules']) delete doc[key]
   doc.proxies = proxies
+  if (proxyProviders) doc['proxy-providers'] = proxyProviders
   if (proxyGroups.length) doc['proxy-groups'] = proxyGroups
   if (Object.keys(providers).length) doc['rule-providers'] = providers
   if (rules.length) doc.rules = rules
