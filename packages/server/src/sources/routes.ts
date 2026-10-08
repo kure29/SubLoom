@@ -4,6 +4,15 @@ import { z } from 'zod'
 import type { AppEnv } from '../app.js'
 import { HttpError } from '../errors.js'
 import {
+  contentSchema,
+  MAX_CONTENT_CHARS,
+  nameSchema,
+  parseBody,
+  ttlSecSchema,
+  urlSchema,
+  userAgentSchema,
+} from '../validation.js'
+import {
   type Ctx,
   createSource,
   deleteSource,
@@ -11,67 +20,30 @@ import {
   getSource,
   listFetchLogs,
   listSources,
-  MIN_TTL_SEC,
   refreshSource,
   type SourceRow,
   toDto,
   updateSource,
 } from './service.js'
 
-/** 本地订阅内容的上限与远程订阅响应体相同 */
-const MAX_CONTENT_CHARS = 10 * 1024 * 1024
-
-const name = z.string().trim().min(1).max(100)
-const url = z
-  .string()
-  .trim()
-  .max(4096)
-  .refine((s) => {
-    try {
-      const u = new URL(s)
-      return u.protocol === 'http:' || u.protocol === 'https:'
-    } catch {
-      return false
-    }
-  }, 'must be an http or https URL')
-const userAgent = z.string().trim().min(1).max(500).nullable()
-const ttlSec = z
-  .number()
-  .int()
-  .min(MIN_TTL_SEC)
-  .max(30 * 86400)
-const content = z.string().min(1).max(MAX_CONTENT_CHARS)
-
 const createSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('remote'),
-    name,
-    url,
-    userAgent: userAgent.optional(),
-    ttlSec: ttlSec.optional(),
+    name: nameSchema,
+    url: urlSchema,
+    userAgent: userAgentSchema.optional(),
+    ttlSec: ttlSecSchema.optional(),
   }),
-  z.strictObject({ kind: z.literal('local'), name, content }),
+  z.strictObject({ kind: z.literal('local'), name: nameSchema, content: contentSchema }),
 ])
 
 const updateSchema = z.strictObject({
-  name: name.optional(),
-  url: url.optional(),
-  content: content.optional(),
-  userAgent: userAgent.optional(),
-  ttlSec: ttlSec.optional(),
+  name: nameSchema.optional(),
+  url: urlSchema.optional(),
+  content: contentSchema.optional(),
+  userAgent: userAgentSchema.optional(),
+  ttlSec: ttlSecSchema.optional(),
 })
-
-async function parseBody<T>(req: { json(): Promise<unknown> }, schema: z.ZodType<T>): Promise<T> {
-  let body: unknown
-  try {
-    body = await req.json()
-  } catch {
-    throw new HttpError(400, 'INVALID_REQUEST', 'request body must be JSON')
-  }
-  const parsed = schema.safeParse(body)
-  if (!parsed.success) throw new HttpError(400, 'INVALID_REQUEST', z.prettifyError(parsed.error))
-  return parsed.data
-}
 
 async function mustGet(ctx: Ctx, id: string): Promise<SourceRow> {
   const row = await getSource(ctx, id)

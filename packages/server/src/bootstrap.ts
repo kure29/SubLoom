@@ -10,6 +10,11 @@ export interface Runtime {
   adminTokenHash: string
   /** 由 SECRET_KEY 派生的 AES-GCM 密钥 */
   key: CryptoKey
+  /**
+   * 密钥来源：env 为 SECRET_KEY 环境变量；generated 为自动生成并存在数据库中
+   * （与密文在同一个数据库里，数据库泄露时加密无效，前端据此提示用户设置 SECRET_KEY）
+   */
+  secretKeySource: 'env' | 'generated'
 }
 
 const KEY_ADMIN_TOKEN_HASH = 'admin_token_hash'
@@ -34,7 +39,7 @@ async function init(platform: Platform): Promise<Runtime> {
   await migrate(platform.db)
   const adminTokenHash = await ensureAdminToken(platform)
   const key = await ensureSecretKey(platform)
-  return { adminTokenHash, key }
+  return { adminTokenHash, key, secretKeySource: platform.env.secretKey ? 'env' : 'generated' }
 }
 
 async function getSetting(platform: Platform, key: string): Promise<string | undefined> {

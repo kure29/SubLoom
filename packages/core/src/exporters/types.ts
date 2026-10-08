@@ -26,6 +26,18 @@ export const ExportOptionsSchema = z.strictObject({
   ruleSetPolicy: z.string().min(1).optional(),
   /** 规则集地址改写，默认 original */
   ruleSetMirror: RuleSetMirrorSchema.optional(),
+  /**
+   * 仅 mihomo：订阅节点改由 proxy-providers 引用（server 生成，指向托管的节点列表）。
+   * 设置后 nodes 不写入配置，includeAllProxies 的组加上 use。
+   */
+  proxyProvider: z
+    .strictObject({
+      name: z.string().min(1),
+      url: z.url({ protocol: /^https?$/ }),
+      /** 更新间隔（秒） */
+      interval: z.number().int().positive().optional(),
+    })
+    .optional(),
 })
 export type ExportOptions = z.infer<typeof ExportOptionsSchema>
 

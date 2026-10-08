@@ -4,8 +4,8 @@ import {
   importSubscription,
   type ProxyNode,
 } from '@subloom/core'
-import { fetchLogs, sources } from '@subloom/db'
-import { and, desc, eq, notInArray } from 'drizzle-orm'
+import { fetchLogs, profiles, sources } from '@subloom/db'
+import { and, desc, eq, inArray, notInArray } from 'drizzle-orm'
 import type { Runtime } from '../bootstrap.js'
 import { DecryptError, decrypt, encrypt } from '../crypto.js'
 import type { SourceErrorCode } from '../errors.js'
@@ -68,7 +68,7 @@ export const blobKeys = {
 }
 
 /** URL 密文的附加认证数据：密文不能挪到其他订阅上使用 */
-const urlAad = (id: string) => `source:${id}`
+export const urlAad = (id: string) => `source:${id}`
 
 export interface Ctx {
   platform: Platform
@@ -127,6 +127,7 @@ export async function createSource(ctx: Ctx, input: CreateInput): Promise<Source
     lastStatus: null,
     lastError: null,
     userinfoJson: null,
+    nodesFetchedAt: null,
     createdAt: now,
     updatedAt: now,
   }
@@ -163,10 +164,33 @@ export async function updateSource(
   return (await getSource(ctx, row.id)) ?? updated
 }
 
+/** 按 ids 的顺序返回存在的订阅源 */
+export async function getSourcesByIds(
+  { platform }: Ctx,
+  ids: readonly string[],
+): Promise<SourceRow[]> {
+  if (ids.length === 0) return []
+  const rows = await platform.db
+    .select()
+    .from(sources)
+    .where(inArray(sources.id, [...ids]))
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  return ids.flatMap((id) => byId.get(id) ?? [])
+}
+
 export async function deleteSource({ platform }: Ctx, id: string): Promise<void> {
   // fetch_logs 有 ON DELETE CASCADE；这里也显式删除，不依赖 foreign_keys 是否开启
   await platform.db.delete(fetchLogs).where(eq(fetchLogs.sourceId, id))
   await platform.db.delete(sources).where(eq(sources.id, id))
+  // 从引用它的 profile 中移除
+  for (const p of await platform.db.select().from(profiles)) {
+    const ids = JSON.parse(p.sourceIdsJson) as string[]
+    if (!ids.includes(id)) continue
+    await platform.db
+      .update(profiles)
+      .set({ sourceIdsJson: JSON.stringify(ids.filter((x) => x !== id)), updatedAt: Date.now() })
+      .where(eq(profiles.id, p.id))
+  }
   await platform.blobs.delete(blobKeys.raw(id))
   await platform.blobs.delete(blobKeys.nodes(id))
 }
@@ -262,6 +286,7 @@ export async function refreshSource(ctx: Ctx, row: SourceRow): Promise<RefreshRe
         lastError: null,
         // 本地订阅没有 userinfo；远程订阅成功拉取但响应中没有该头时清空
         userinfoJson: userinfo ? JSON.stringify(userinfo) : null,
+        nodesFetchedAt: startedAt,
       })
       .where(eq(sources.id, row.id))
     await addLog(ctx, row.id, {

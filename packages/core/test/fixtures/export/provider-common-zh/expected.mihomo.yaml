@@ -1,0 +1,140 @@
+proxies: []
+proxy-providers:
+  subloom:
+    type: http
+    url: https://subloom.example.com/sub/aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5bC7dE9f/proxies
+    interval: 21600
+proxy-groups:
+  - name: 节点选择
+    type: select
+    proxies:
+      - 自动选择
+      - DIRECT
+    use:
+      - subloom
+    include-all-proxies: true
+  - name: 自动选择
+    type: url-test
+    use:
+      - subloom
+    include-all-proxies: true
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: AI 服务
+    type: select
+    proxies:
+      - 节点选择
+      - 自动选择
+    use:
+      - subloom
+    include-all-proxies: true
+  - name: YouTube
+    type: select
+    proxies:
+      - 节点选择
+      - 自动选择
+      - DIRECT
+    use:
+      - subloom
+    include-all-proxies: true
+  - name: 谷歌服务
+    type: select
+    proxies:
+      - 节点选择
+      - 自动选择
+      - DIRECT
+    use:
+      - subloom
+    include-all-proxies: true
+  - name: 电报消息
+    type: select
+    proxies:
+      - 节点选择
+      - 自动选择
+      - DIRECT
+    use:
+      - subloom
+    include-all-proxies: true
+  - name: 微软服务
+    type: select
+    proxies:
+      - DIRECT
+      - 节点选择
+      - 自动选择
+    use:
+      - subloom
+    include-all-proxies: true
+  - name: 漏网之鱼
+    type: select
+    proxies:
+      - 节点选择
+      - DIRECT
+rule-providers:
+  lan:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Lan/Lan.yaml
+    proxy: 节点选择
+    interval: 86400
+  openai:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/OpenAI/OpenAI.yaml
+    proxy: 节点选择
+    interval: 86400
+  claude:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Claude/Claude.yaml
+    proxy: 节点选择
+    interval: 86400
+  gemini:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Gemini/Gemini.yaml
+    proxy: 节点选择
+    interval: 86400
+  youtube:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/YouTube/YouTube.yaml
+    proxy: 节点选择
+    interval: 86400
+  google:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Google/Google.yaml
+    proxy: 节点选择
+    interval: 86400
+  telegram:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Telegram/Telegram.yaml
+    proxy: 节点选择
+    interval: 86400
+  microsoft:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Microsoft/Microsoft.yaml
+    proxy: 节点选择
+    interval: 86400
+rules:
+  - RULE-SET,lan,DIRECT,no-resolve
+  - RULE-SET,openai,AI 服务
+  - RULE-SET,claude,AI 服务
+  - RULE-SET,gemini,AI 服务
+  - RULE-SET,youtube,YouTube
+  - RULE-SET,google,谷歌服务
+  - RULE-SET,telegram,电报消息,no-resolve
+  - RULE-SET,microsoft,微软服务
+  - GEOIP,CN,DIRECT
+  - MATCH,漏网之鱼

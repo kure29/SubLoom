@@ -21,5 +21,5 @@ describeApi({ bootstrap, createApp, runScheduledRefresh }, async () => {
   dirs.push(dir)
   const { db, close } = openDatabase(':memory:')
   closers.push(close)
-  return { db, blobs: await createFileBlobStore(join(dir, 'blobs')), waitUntil }
+  return { name: 'node', db, blobs: await createFileBlobStore(join(dir, 'blobs')), waitUntil }
 })

@@ -107,6 +107,7 @@ describe('golden: export fixtures', () => {
         'cleanup',
         'edge-common-en',
         'profile-features',
+        'provider-common-zh',
         'uri-common-zh',
         'uri-minimal-en',
         'variants',

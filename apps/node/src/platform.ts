@@ -34,5 +34,5 @@ export async function createNodePlatform(
   await mkdir(dataDir, { recursive: true })
   const { db, close } = openDatabase(join(dataDir, 'subloom.db'))
   const blobs = await createFileBlobStore(join(dataDir, 'blobs'))
-  return { platform: { db, blobs, env, waitUntil, resolveHost }, close }
+  return { platform: { name: 'node', db, blobs, env, waitUntil, resolveHost }, close }
 }
