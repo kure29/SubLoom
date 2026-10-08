@@ -24,6 +24,12 @@ export const PipelineOpSchema = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('dedupe'), by: z.enum(['name', 'server']) }),
   z.strictObject({ op: z.literal('prefix'), text: z.string().min(1) }),
   z.strictObject({ op: z.literal('suffix'), text: z.string().min(1) }),
+  /** 强制开启 UDP；pattern 和 types 都不给时作用于全部节点，都给时两者都要满足 */
+  z.strictObject({
+    op: z.literal('force-udp'),
+    pattern: z.string().min(1).optional(),
+    types: z.array(ProxyTypeSchema).min(1).optional(),
+  }),
 ])
 export type PipelineOp = z.infer<typeof PipelineOpSchema>
 

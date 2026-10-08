@@ -5,14 +5,21 @@
       "level": "warn",
       "path": "groups[0].members[1]",
       "code": "UNKNOWN_GROUP_MEMBER",
-      "message": "the proxy referenced by this member does not exist",
+      "message": "the proxy referenced by this member does not exist or was dropped",
       "action": "dropped"
     },
     {
       "level": "warn",
       "path": "groups[0].members[5]",
       "code": "UNKNOWN_GROUP_MEMBER",
-      "message": "the proxy referenced by this member does not exist",
+      "message": "the proxy referenced by this member does not exist or was dropped",
+      "action": "dropped"
+    },
+    {
+      "level": "info",
+      "path": "ruleSets[1].extra.mihomo.proxy",
+      "code": "EXTRA_IGNORED",
+      "message": "the download policy of rule sets is set by the ruleSetPolicy export option",
       "action": "dropped"
     }
   ]

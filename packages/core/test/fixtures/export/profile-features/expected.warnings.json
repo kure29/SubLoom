@@ -1,4 +1,12 @@
 {
   "pipeline": [],
-  "export": []
+  "export": [
+    {
+      "level": "info",
+      "path": "ruleSets[2].extra.mihomo.proxy",
+      "code": "EXTRA_IGNORED",
+      "message": "the download policy of rule sets is set by the ruleSetPolicy export option",
+      "action": "dropped"
+    }
+  ]
 }

@@ -38,6 +38,17 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # 500 节点完整链路的耗时；回退由 test/perf/chain.test.ts 的宽松上限拦截，这里只记录数字
+      - name: Benchmark (500 nodes)
+        run: |
+          pnpm --filter @subloom/core bench | tee bench.txt
+          {
+            echo '### @subloom/core 性能基准（500 节点，单位 ms）'
+            echo '```'
+            grep -E '^ +(name|·) ' bench.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build
         run: pnpm build
 

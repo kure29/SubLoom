@@ -218,12 +218,13 @@ interface Capabilities {
   ruleTypes: RuleType[]
   logicalRules: boolean
   ruleSetFormats: string[]
+  ruleSetProxy: boolean     // 能否指定通过某个策略组下载规则集
   // 按需扩展
 }
 
 interface CompatWarning {
   level: 'info' | 'warn' | 'error'
-  path: string              // 如 groups[2].type、proxies[5]
+  path: string              // 如 groups[2].type、proxies[5]、nodes[3]（订阅节点）、options.ruleSetPolicy
   code: string              // 如 UNSUPPORTED_PROXY_TYPE，前端据此做多语言
   message: string
   action: 'dropped' | 'downgraded' | 'kept'
@@ -231,6 +232,8 @@ interface CompatWarning {
 
 interface ExportOptions {
   defaultUdp?: boolean      // 节点未设置 udp 时是否开启 UDP，默认 true
+  ruleSetPolicy?: string    // 规则集下载策略组：策略组名或 DIRECT，默认见下方"规则集下载"
+  ruleSetMirror?: 'original' | 'jsdelivr' | { prefix: string } // 规则集镜像，默认 original
 }
 
 interface Exporter {
@@ -242,15 +245,33 @@ interface Exporter {
 
 - `nodes` 是经过流水线处理的订阅节点。输出的节点列表为 `profile.proxies` 在前、`nodes` 在后。
 - 协议字段到各客户端的映射用**表驱动**写法，不要散落在 if-else 里。导入器和导出器共用同一张字段表。
-- 降级规则示例：目标不支持 `load-balance` 时降级为 `url-test` 并警告；不支持的节点类型直接移除并警告；引用了被移除的组或节点的地方同步清理。
+- **共用的导出前处理**（`exporters/resolve.ts` 的 `resolveProfile`）：降级、名称冲突、引用清理与客户端无关，所有导出器先调用它，再把结果写成自己的格式，保证行为一致。客户端只提供能力矩阵、内置策略名、规则集来源选择，以及可选的节点子功能检查和规则参数检查。处理顺序（也是警告的顺序）：组去重 → 节点（类型、子功能）→ 节点改名 → 组（类型降级、成员）→ 规则集（来源、镜像）→ 规则集下载策略 → 规则。
+- **降级规则**：
+  - 不支持的节点类型：移除并警告（`UNSUPPORTED_PROXY_TYPE`）。被移除的节点不占用名称。
+  - 节点类型受支持、但用到了不支持的子功能：影响连通性的（传输层、插件、reality、obfs 等）移除整个节点；不影响连通性的可选项（如 uTLS 指纹）只去掉该字段，节点保留。两种情况都给出 `UNSUPPORTED_PROXY_FEATURE` 警告，path 指向具体字段（如 `nodes[3].tls.clientFingerprint`）。每个客户端的字段归类写在该导出器的能力矩阵旁边。
+  - 不支持的组类型：`load-balance`、`fallback` 降级为 `url-test`，`url-test` 降级为 `select`（`UNSUPPORTED_GROUP_TYPE`，path 为 `groups[i].type`）。
+  - 不支持的规则类型（含逻辑规则中的子条件）、不支持逻辑规则时的 AND/OR/NOT：移除整条规则（`UNSUPPORTED_RULE_TYPE`）。客户端无法表达的规则参数（如 `src`）同样移除整条规则（`UNSUPPORTED_RULE_PARAM`），不丢弃参数后保留规则。
+  - 引用了被移除的组或节点的地方按下面的"悬空引用"规则同步清理。
 - **名称冲突**：节点重名（含与策略组名、内置目标重名）时，后出现的节点自动改名为 `名称 2`、`名称 3`……并警告；策略组成员和规则中引用该名称的地方指向第一个同名节点。策略组重名时保留第一个，其余移除并警告。
-- **悬空引用**：策略组中找不到的节点或组成员移除并警告；移除后没有任何成员（且没有 `includeAllProxies` 等自动包含方式）的组补上 `DIRECT` 并警告；目标不存在的规则、引用了不存在或不可用规则集的规则移除并警告。
+- **悬空引用**：策略组中找不到（不存在或已被移除）的节点或组成员移除并警告；移除后没有任何成员（且没有 `includeAllProxies` 等自动包含方式）的组补上 `DIRECT` 并警告；目标不存在的规则、引用了不存在或不可用规则集的规则移除并警告。规则集 `id` 重复时保留第一个，其余移除并警告。
 - **extra**：只合并与目标格式同名的命名空间（深度合并，IR 字段优先），其余命名空间丢弃并给出 `EXTRA_IGNORED` 警告。
+
+### 规则集下载
+
+- **下载策略组**（导出选项 `ruleSetPolicy`）：指定通过哪个策略组下载规则集，值为策略组名或 `DIRECT`。未设置时使用 profile 中第一个 `select` 组（预设模板中即"节点选择"），没有 `select` 组时为 `DIRECT`。只能选策略组或 `DIRECT`，不能选单个节点或其他内置策略。
+- 指定的策略组不存在（被删除或改名）时按引用清理规则回退到 `DIRECT`，并给出 `UNKNOWN_RULE_SET_POLICY` 警告（path 为 `options.ruleSetPolicy`）。
+- 客户端是否支持"通过代理下载规则集"是能力矩阵中的一项（`ruleSetProxy`），以各客户端官方文档为准。不支持且下载策略不是 `DIRECT` 时给出 `RULE_SET_PROXY_UNSUPPORTED` 警告，提示改用镜像地址；已经设置了镜像时降为 info。
+- 没有导出任何规则集时不检查此选项，也不产生警告。
+- **规则集镜像**（导出选项 `ruleSetMirror`）：作为不支持代理下载时的备选，对所有客户端生效。
+  - `original`（默认）：原始地址。
+  - `jsdelivr`：把 `raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>`（含 `refs/heads/`、`refs/tags/` 形式）和 `github.com/<owner>/<repo>/raw/<ref>/<path>` 改写为 `cdn.jsdelivr.net/gh/<owner>/<repo>@<ref>/<path>`；其他地址保持原样并给出 info 级的 `RULE_SET_MIRROR_UNSUPPORTED`。
+  - `{ prefix }`：在原始地址前直接拼接自定义前缀（如 `https://mirror.example.com/` + 原始地址）。
 
 ### mihomo 导出器
 
 - 输出顺序：general 字段 → 顶层 extra → `dns` → `proxies` → `proxy-groups` → `rule-providers` → `rules`。
 - 规则集输出为 `rule-providers`（`type: http`，键为 RuleSet 的 `id`）+ `RULE-SET,<id>,<target>` 规则。没有 `sources.mihomo`、格式为 `list`、或 `classical` 行为配 `mrs` 格式的规则集无法使用，移除并警告。
+- rule-provider 总是输出 `proxy` 字段（下载策略，见"规则集下载"，包括 `DIRECT`）。导入时保留在 `extra.mihomo.proxy` 中的值被导出选项覆盖，两者不同时给出 info 级的 `EXTRA_IGNORED`。
 - 节点直接写入 `proxies`。`proxy-providers`（指向托管节点列表的链接）依赖 M4 的输出链接，届时再做。
 - YAML 用 `yaml` 库生成，不折行；按 YAML 1.1 规则给可能被误读的字符串（如 `01234567`、`yes`、`1_000`）加引号，保证 mihomo（go-yaml）读到的仍是字符串。
 
@@ -268,6 +289,7 @@ type PipelineOp =
   | { op: 'sort'; by: 'name' | 'region'; order: 'asc' | 'desc' }
   | { op: 'dedupe'; by: 'name' | 'server' }
   | { op: 'prefix' | 'suffix'; text: string }
+  | { op: 'force-udp'; pattern?: string; types?: ProxyType[] }
 ```
 
 - `runPipeline(nodes, ops)` 是纯函数，按顺序执行，返回 `{ nodes, warnings }`。它只处理订阅节点，手动添加的节点（`profile.proxies`）不经过流水线。
@@ -276,6 +298,7 @@ type PipelineOp =
 - `add-flag`：在名称前加地区国旗和一个空格；名称已以国旗开头或识别不出地区时不变。
 - `sort`：稳定排序。`name` 按 `Intl.Collator`（numeric）比较；`region` 按内置地区表的顺序（常见地区在前），识别不出地区的节点无论升降序都排在最后。
 - `dedupe`：保留第一个。`name` 按名称；`server` 按 `type + server + port`。
+- `force-udp`：把作用范围内节点的 `udp` 设为 `true`（覆盖来源给出的 `false`）。`pattern`（正则，规则同上）和 `types` 都不给时作用于全部节点；只给一个时按它筛选；都给时两者都要满足。预设模板不默认启用，由前端作为一个明显的开关提供。
 
 ### 预设模板
 
@@ -399,6 +422,7 @@ GET /sub/:token
 | 限制 | 对策 |
 |---|---|
 | 免费版单次请求 CPU 时间很短（约 10ms） | 生成结果缓存 + stale-while-revalidate；M2 里做性能基准测试（500 个节点），超限时在文档中说明可升级付费计划或改用 Docker |
+| 500 节点完整链路（解析 mihomo YAML → 流水线 → 导出）约 120ms（开发机 Node 22，其中 `yaml` 库的解析约 70ms、生成约 30ms），远超免费版 CPU 限制 | 同上：依靠缓存，`/sub/:token` 绝大多数请求不触发生成；文档中说明免费版在缓存未命中时可能超限 |
 | 不支持 eval | 自定义脚本功能仅 Docker 提供，前端根据 `/api/meta` 的平台信息隐藏 |
 | 出口 IP 属于 Cloudflare，部分机场会拦截 | 文档说明，建议此类用户使用 Docker |
 | D1 有单行大小限制 | 大内容放 KV |
@@ -453,7 +477,7 @@ GET /sub/:token
 - **core**：每个导入器和导出器都有 golden 测试（`test/fixtures/<case>/input.*` 与 `expected.<target>.*`）。更新快照必须是有意为之。
 - **mihomo 实际校验**：CI 按固定版本（tag + commit SHA）从源码构建 mihomo（go.sum 校验依赖），对所有 `expected.mihomo.*` golden 输出执行 `mihomo -t`。GEOIP/GEOSITE 数据文件由 mihomo 首次运行时自动下载，所有文件共用一个数据目录并在 CI 中缓存。
 - **server**：同一套 API 集成测试分别在 Node（better-sqlite3）和 Workers（vitest-pool-workers + D1/KV 模拟）下运行。
-- **性能基准**：500 节点订阅 → 解析 → 流水线 → 导出，记录耗时，在 CI 中监控回退。
+- **性能基准**：500 节点订阅 → 解析 → 流水线 → 导出，记录耗时，在 CI 中监控回退。`packages/core/test/perf/` 中确定性生成 500 个节点（常见协议轮流出现）；`chain.bench.ts`（`pnpm --filter @subloom/core bench`）分别测量解析、流水线、各导出器和完整链路，CI 把结果写入 job summary；`chain.test.ts` 给完整链路设宽松上限（500ms，取 5 次中最快的一次），只拦截数量级的回退，避免 runner 性能波动导致误报。
 - **CI 流程**：lint → typecheck → test → build；main 分支打 tag 时发布 Docker 镜像。
 
 ---

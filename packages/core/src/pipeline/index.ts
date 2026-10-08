@@ -112,6 +112,13 @@ function apply(
       return nodes.map((n) => rename(n, `${op.text}${n.name}`))
     case 'suffix':
       return nodes.map((n) => rename(n, `${n.name}${op.text}`))
+    case 'force-udp': {
+      const re = op.pattern === undefined ? undefined : compile(op.pattern)
+      const types = op.types && new Set<string>(op.types)
+      return nodes.map((n) =>
+        (!re || re.test(n.name)) && (!types || types.has(n.type)) ? { ...n, udp: true } : n,
+      )
+    }
   }
 }
 

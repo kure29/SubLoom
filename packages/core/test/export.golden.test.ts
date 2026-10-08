@@ -3,6 +3,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import {
   createTemplate,
+  ExportOptionsSchema,
   exportMihomo,
   type ImportResult,
   importMihomoYaml,
@@ -11,6 +12,7 @@ import {
   type Profile,
   ProfileSchema,
   ProxySchema,
+  type RuleSet,
   runPipeline,
   TEMPLATE_IDS,
 } from '../src/index.js'
@@ -33,7 +35,7 @@ const CaseSchema = z
     /** 用订阅中的策略组、规则等作为 profile */
     importConfig: z.literal(true).optional(),
     pipeline: PipelineSchema.optional(),
-    options: z.strictObject({ defaultUdp: z.boolean().optional() }).optional(),
+    options: ExportOptionsSchema.optional(),
   })
   .refine(
     (c) => [c.profile, c.template, c.importConfig].filter((x) => x !== undefined).length === 1,
@@ -131,6 +133,13 @@ describe('golden: export fixtures', () => {
   })
 })
 
+function withoutPolicy(sets: RuleSet[] = []): RuleSet[] {
+  return sets.map(({ extra, ...set }) => {
+    const { proxy: _, ...mihomo } = extra?.mihomo ?? {}
+    return Object.keys(mihomo).length ? { ...set, extra: { ...extra, mihomo } } : set
+  })
+}
+
 describe('round trip of mihomo configs', () => {
   it.each(['airport-full', 'variants'])('%s re-imports to the same IR', (name) => {
     const { imported, result } = output(name)
@@ -138,7 +147,8 @@ describe('round trip of mihomo configs', () => {
     const again = importMihomoYaml(result.text)
     expect(again.proxies).toEqual(imported.proxies)
     expect(again.config?.rules).toEqual(imported.config.rules)
-    expect(again.config?.ruleSets).toEqual(imported.config.ruleSets)
+    // 规则集的下载策略由导出选项决定，不参与往返比较
+    expect(withoutPolicy(again.config?.ruleSets)).toEqual(withoutPolicy(imported.config.ruleSets))
     expect(again.config?.general).toEqual(imported.config.general)
     expect(again.config?.dns).toEqual(imported.config.dns)
   })

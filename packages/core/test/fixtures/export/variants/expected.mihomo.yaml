@@ -258,6 +258,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: https://rules.example.com/ads.mrs
+    proxy: 节点选择
     interval: 86400
     path: ./ruleset/ads.mrs
   apps:
@@ -265,7 +266,7 @@ rule-providers:
     behavior: classical
     format: text
     url: https://rules.example.com/apps.list
-    proxy: DIRECT
+    proxy: 节点选择
 rules:
   - RULE-SET,ads,REJECT
   - RULE-SET,apps,节点选择

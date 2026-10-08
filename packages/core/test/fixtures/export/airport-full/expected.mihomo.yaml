@@ -211,6 +211,7 @@ rule-providers:
     behavior: domain
     format: yaml
     url: https://example.com/rules/reject.yaml
+    proxy: 节点选择
     interval: 86400
     path: ./ruleset/reject.yaml
 rules:
